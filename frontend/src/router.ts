@@ -1,4 +1,5 @@
 import { createRouter, createWebHistory } from "vue-router";
+import ChatView from "./views/ChatView.vue";
 import HealthView from "./views/HealthView.vue";
 
 const router = createRouter({
@@ -6,7 +7,8 @@ const router = createRouter({
   routes: [
     {
       path: "/",
-      redirect: "/health",
+      name: "chat",
+      component: ChatView,
     },
     {
       path: "/health",

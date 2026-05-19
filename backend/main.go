@@ -1,26 +1,24 @@
 package main
 
 import (
-	"net/http"
 	"os"
 
-	"github.com/gin-gonic/gin"
+	"soulsync/backend/internal/app"
 )
 
 func main() {
-	router := gin.Default()
-
-	router.GET("/healthz", func(c *gin.Context) {
-		c.JSON(http.StatusOK, gin.H{
-			"service": "backend",
-			"status":  "ok",
-		})
-	})
-
 	port := os.Getenv("PORT")
 	if port == "" {
 		port = "8080"
 	}
+
+	aiEngineBaseURL := os.Getenv("AI_ENGINE_BASE_URL")
+	if aiEngineBaseURL == "" {
+		aiEngineBaseURL = "http://localhost:8000"
+	}
+
+	service := app.NewService(app.NewAIClient(aiEngineBaseURL), app.NewTraceStore())
+	router := app.NewHTTPServer(service).Router()
 
 	if err := router.Run(":" + port); err != nil {
 		panic(err)
