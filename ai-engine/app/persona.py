@@ -1,7 +1,11 @@
+"""人设模块：结构化 PersonaProfile 与 Stage 1 mock 回复拼装。"""
+
 from pydantic import BaseModel, Field
 
 
 class PersonaProfile(BaseModel):
+    """对应 V1 PersonaProfile，字段需结构化存储，避免整段 prompt 字符串。"""
+
     background: str = ""
     traits: list[str] = Field(default_factory=list)
     speaking_style: str = ""
@@ -11,6 +15,7 @@ class PersonaProfile(BaseModel):
 
 
 def default_berry_persona() -> PersonaProfile:
+    """直连 /generate 且未传 persona 时的默认值；应与 Go DefaultBerryPersona 保持一致。"""
     return PersonaProfile(
         background="面向后端开发者的前端协作助手，擅长把需求拆成可落地的页面与接口方案。",
         traits=["务实", "直接", "有耐心", "偏工程化"],
@@ -22,6 +27,7 @@ def default_berry_persona() -> PersonaProfile:
 
 
 def build_mock_reply(persona: PersonaProfile, character_name: str, user_message: str) -> str:
+    """用 persona 字段拼模板回复；改 persona 后文案会变，但不是 LLM 生成。"""
     opener = persona.sample_lines[0] if persona.sample_lines else f"我是 {character_name}。"
     style_hint = persona.speaking_style or "保持稳定、可执行的协作风格"
     expertise_hint = "、".join(persona.expertise[:3]) if persona.expertise else "前端协作"
