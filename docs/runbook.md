@@ -73,7 +73,7 @@ npm run build
 
 ```bash
 cd ai-engine
-./.venv/bin/python -m py_compile app/main.py
+./.venv/bin/python -m compileall app
 ```
 
 ## 手动联调
@@ -81,7 +81,7 @@ cd ai-engine
 ### 健康检查
 
 ```bash
-curl http://127.0.0.1:8000/healthz
+curl http://127.0.0.1:8000/health
 curl http://127.0.0.1:8080/healthz
 ```
 
@@ -94,9 +94,9 @@ http://127.0.0.1:5173/health
 ### AI 服务直连
 
 ```bash
-curl -X POST http://127.0.0.1:8000/reply \
+curl -X POST http://127.0.0.1:8000/generate \
   -H 'Content-Type: application/json' \
-  -d '{"message":"hello"}'
+  -d '{"user_message":"hello"}'
 ```
 
 ### 后端主链路
@@ -147,8 +147,8 @@ uv run --python .venv/bin/python uvicorn app.main:app \
 按顺序排查：
 
 1. `curl http://127.0.0.1:8080/healthz`
-2. `curl http://127.0.0.1:8000/healthz`
-3. `curl -X POST http://127.0.0.1:8000/reply ...`
+2. `curl http://127.0.0.1:8000/health`
+3. `curl -X POST http://127.0.0.1:8000/generate ...`
 4. 再测 `POST /api/chat`
 
 ## 文档边界

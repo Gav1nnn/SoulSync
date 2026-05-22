@@ -1,36 +1,20 @@
 from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel, Field
 
+from app.orchestration import generate_reply
+from app.schemas import GenerateRequest, GenerateResponse
 
 app = FastAPI(title="SoulSync AI Engine")
 
 
-class ReplyRequest(BaseModel):
-    message: str = Field(min_length=1)
-
-
-class ReplyResponse(BaseModel):
-    reply: str
-    persona: str
-    context_used: list[str]
-
-
-@app.get("/healthz")
-def healthz() -> dict[str, str]:
+@app.get("/health")
+def health() -> dict[str, str]:
     return {"service": "ai-engine", "status": "ok"}
 
 
-@app.post("/reply", response_model=ReplyResponse)
-def reply(payload: ReplyRequest) -> ReplyResponse:
-    message = payload.message.strip()
-    if not message:
-        raise HTTPException(status_code=400, detail="message must not be empty")
+@app.post("/generate", response_model=GenerateResponse)
+def generate(payload: GenerateRequest) -> GenerateResponse:
+    user_message = payload.user_message.strip()
+    if not user_message:
+        raise HTTPException(status_code=400, detail="user_message must not be empty")
 
-    return ReplyResponse(
-        reply=(
-            f"我是 Berry。你这句“{message}”我已经接住了。"
-            "先别急着乱堆页面，我会先帮你把结构、状态和接口边界捋顺，再开始写前端。"
-        ),
-        persona="Berry",
-        context_used=["persona"],
-    )
+    return generate_reply(payload.model_copy(update={"user_message": user_message}))
