@@ -9,9 +9,12 @@ def build_generate_response(
     reply: str,
     character_name: str,
     persona: PersonaProfile,
+    llm_provider: str | None = None,
 ) -> GenerateResponse:
     """汇总 reply 与 context_used 等，供 Go 记录 trace / GenerationTrace。"""
     context_used = ["persona"]
+    if llm_provider:
+        context_used.append(llm_provider)
     if persona.expertise:
         context_used.append("persona.expertise")
     if persona.sample_lines:

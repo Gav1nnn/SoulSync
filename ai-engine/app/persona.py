@@ -26,6 +26,25 @@ def default_berry_persona() -> PersonaProfile:
     )
 
 
+def build_system_prompt(persona: PersonaProfile, character_name: str) -> str:
+    """把结构化 persona 转成 DeepSeek system 消息。"""
+    traits = "、".join(persona.traits) if persona.traits else "务实、直接"
+    expertise = "、".join(persona.expertise) if persona.expertise else "前端协作"
+    taboos = "、".join(persona.taboos) if persona.taboos else "无特别禁忌"
+    samples = "\n".join(f"- {line}" for line in persona.sample_lines) if persona.sample_lines else "- （无示例句）"
+
+    return (
+        f"你是 SoulSync 助手「{character_name}」。\n"
+        f"背景：{persona.background or '面向开发者的协作助手。'}\n"
+        f"性格特点：{traits}\n"
+        f"说话风格：{persona.speaking_style or '简洁、可执行。'}\n"
+        f"擅长：{expertise}\n"
+        f"避免：{taboos}\n"
+        f"示例口吻：\n{samples}\n"
+        "请用中文回复，优先给出可落地的步骤，不要空泛鸡汤。"
+    )
+
+
 def build_mock_reply(persona: PersonaProfile, character_name: str, user_message: str) -> str:
     """用 persona 字段拼模板回复；改 persona 后文案会变，但不是 LLM 生成。"""
     opener = persona.sample_lines[0] if persona.sample_lines else f"我是 {character_name}。"

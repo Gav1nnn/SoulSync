@@ -15,6 +15,19 @@ class GenerateRequest(BaseModel):
     persona: PersonaProfile = Field(default_factory=default_berry_persona)
 
 
+class DeepSeekChatRequest(BaseModel):
+    """直连 DeepSeek 的调试/扩展接口；messages 遵循 OpenAI Chat 格式。"""
+
+    messages: list[dict[str, str]] = Field(min_length=1)
+    model: str | None = None
+
+
+class DeepSeekChatResponse(BaseModel):
+    reply: str
+    model: str
+    provider: str = "ollama"
+
+
 class GenerateResponse(BaseModel):
     """回复正文 + 供 Go 写入 GenerationTrace 的元数据。"""
 
