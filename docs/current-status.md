@@ -22,7 +22,7 @@ SoulSync 当前阶段只做一件事：打通最小主链路，形成“可运�
 - 前端最小聊天页
 - 前端通过 `/api/chat` 请求 Go
 - Go 通过 HTTP 调用 Python
-- Python 返回固定 Berry 风格回复
+- Python 通过 `POST /generate` 返回结构化 persona 驱动的 Berry mock 回复
 - Go 生成 `trace_id`
 - Go 记录最小内存态 trace
 - 前后端联调已通过

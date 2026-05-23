@@ -10,12 +10,12 @@ import (
 
 func TestChatReturnsReplyAndTraceID(t *testing.T) {
 	aiEngine := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodPost || r.URL.Path != "/reply" {
+		if r.Method != http.MethodPost || r.URL.Path != "/generate" {
 			t.Fatalf("unexpected request: %s %s", r.Method, r.URL.Path)
 		}
 
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"reply":"Berry reply","persona":"Berry","context_used":["persona"]}`))
+		_, _ = w.Write([]byte(`{"reply":"Berry reply","persona":"Berry","context_used":["persona"],"used_persona":true,"used_memory_ids":[],"used_knowledge_chunk_ids":[],"memory_written":false}`))
 	}))
 	defer aiEngine.Close()
 
@@ -40,7 +40,7 @@ func TestChatReturnsReplyAndTraceID(t *testing.T) {
 		t.Fatalf("unexpected reply: %q", response.Reply)
 	}
 
-	if response.Persona != personaName {
+	if response.Persona != defaultCharacterName {
 		t.Fatalf("unexpected persona: %q", response.Persona)
 	}
 
