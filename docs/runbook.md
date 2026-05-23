@@ -73,15 +73,83 @@ npm run build
 
 ```bash
 cd ai-engine
-./.venv/bin/python -m py_compile app/main.py
+cp .env.example .env
+# 编辑 .env，填入 DEEPSEEK_API_KEY（可选；未配置时 /generate 使用 mock）
+uv pip install --python .venv/Scripts/python.exe -r requirements.txt
+./.venv/Scripts/python.exe -m compileall app
 ```
+
+环境变量（`ai-engine/.env`，见 `.env.example`）：
+
+- `LLM_PROVIDER=ollama`：使用本地 Ollama（无需 API Key）
+- `LLM_BASE_URL`：Ollama 默认 `http://127.0.0.1:11434/v1`
+- `LLM_MODEL`：与 `ollama list` 中名称一致，如 `qwen2.5:3b`
+- `LLM_DISABLED=true`：强制只用 mock
+- 旧名 `DEEPSEEK_*` 仍兼容云端 DeepSeek
+
+## Ollama 本地小模型接入
+
+### 1. 安装 Ollama（Windows）
+
+从 [https://ollama.com/download](https://ollama.com/download) 安装。安装后托盘程序会自动提供 API（默认 `11434` 端口）。
+
+### 2. 拉取小模型
+
+```powershell
+ollama pull qwen2.5:3b
+# 或其它：ollama pull llama3.2:3b
+ollama list
+```
+
+### 3. 配置 SoulSync ai-engine
+
+```powershell
+cd ai-engine
+copy .env.example .env
+```
+
+编辑 `.env`（方案 A）：
+
+```env
+LLM_PROVIDER=ollama
+LLM_BASE_URL=http://127.0.0.1:11434/v1
+LLM_MODEL=qwen2.5:3b
+```
+
+### 4. 启动顺序
+
+```text
+1. 确认 Ollama 在运行（托盘图标 / ollama list 能成功）
+2. 启动 ai-engine（读取 .env）
+3. 启动 backend
+4. 启动 frontend
+```
+
+### 5. 验证
+
+```powershell
+# 应看到 llm_provider=ollama
+curl http://127.0.0.1:8000/health
+
+# 直连本地模型
+curl -X POST http://127.0.0.1:8000/llm/deepseek/chat `
+  -H "Content-Type: application/json" `
+  -d '{"messages":[{"role":"user","content":"hello"}]}'
+
+# 经 Go 主链路（前端聊天同此路径）
+curl -X POST http://127.0.0.1:8080/api/chat `
+  -H "Content-Type: application/json" `
+  -d '{"message":"帮我拆一个列表页"}'
+```
+
+成功时回复为模型生成内容；`context_used` 含 `ollama`。Ollama 未启动或模型名错误时会回退 mock（`mock_fallback`）。
 
 ## 手动联调
 
 ### 健康检查
 
 ```bash
-curl http://127.0.0.1:8000/healthz
+curl http://127.0.0.1:8000/health
 curl http://127.0.0.1:8080/healthz
 ```
 
@@ -94,9 +162,17 @@ http://127.0.0.1:5173/health
 ### AI 服务直连
 
 ```bash
-curl -X POST http://127.0.0.1:8000/reply \
+curl -X POST http://127.0.0.1:8000/generate \
   -H 'Content-Type: application/json' \
-  -d '{"message":"hello"}'
+  -d '{"user_message":"hello"}'
+```
+
+### LLM 直连（Ollama / DeepSeek，需已配置 .env）
+
+```bash
+curl -X POST http://127.0.0.1:8000/llm/deepseek/chat \
+  -H 'Content-Type: application/json' \
+  -d '{"messages":[{"role":"user","content":"用一句话介绍 Vue3"}]}'
 ```
 
 ### 后端主链路
@@ -147,8 +223,8 @@ uv run --python .venv/bin/python uvicorn app.main:app \
 按顺序排查：
 
 1. `curl http://127.0.0.1:8080/healthz`
-2. `curl http://127.0.0.1:8000/healthz`
-3. `curl -X POST http://127.0.0.1:8000/reply ...`
+2. `curl http://127.0.0.1:8000/health`
+3. `curl -X POST http://127.0.0.1:8000/generate ...`
 4. 再测 `POST /api/chat`
 
 ## 文档边界
