@@ -30,7 +30,7 @@ Berry 的核心价值：
 -> frontend
 -> POST /api/chat
 -> backend
--> POST /reply
+-> POST /generate
 -> ai-engine
 -> backend
 -> frontend 展示回复
@@ -80,10 +80,10 @@ Berry 的核心价值：
 
 - 技术：`Python + FastAPI`
 - 当前职责：
-  - 提供健康检查
-  - 接收用户消息
-  - 返回 Berry 风格回复
-  - 返回 `context_used`
+  - 提供健康检查（`GET /health`）
+  - 接收 Go 传入的结构化 persona 与用户消息（`POST /generate`）
+  - 通过 `persona` + `orchestration` + `evaluation` 模块返回 Berry 风格 mock 回复
+  - 返回 `context_used` 与 trace 相关字段（`used_persona`、`used_memory_ids` 等）
 
 ## 当前接口边界
 
@@ -109,21 +109,37 @@ Berry 的核心价值：
 
 ### backend -> ai-engine
 
-`POST /reply`
+`POST /generate`
 
 请求：
 
 ```json
-{ "message": "hello" }
+{
+  "user_message": "hello",
+  "character_id": "berry",
+  "character_name": "Berry",
+  "persona": {
+    "background": "...",
+    "traits": ["务实", "直接"],
+    "speaking_style": "...",
+    "taboos": [],
+    "expertise": ["Vue"],
+    "sample_lines": ["我是 Berry。"]
+  }
+}
 ```
 
 响应：
 
 ```json
 {
-  "reply": "我是 Berry。你这句“hello”我已经接住了。先别急着乱堆页面，我会先帮你把结构、状态和接口边界捋顺，再开始写前端。",
+  "reply": "我是 Berry。你这句「hello」我已经接住了。...",
   "persona": "Berry",
-  "context_used": ["persona"]
+  "context_used": ["persona", "persona.expertise", "persona.sample_lines"],
+  "used_persona": true,
+  "used_memory_ids": [],
+  "used_knowledge_chunk_ids": [],
+  "memory_written": false
 }
 ```
 
