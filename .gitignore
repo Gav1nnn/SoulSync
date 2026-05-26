@@ -1,15 +1,33 @@
 .DS_Store
 
+# editor
+.vscode/
+.idea/
+
 # frontend
 frontend/node_modules/
 frontend/dist/
 
 # backend
 backend/bin/
+*.out
 
 # ai-engine
+.venv/
 ai-engine/.venv/
+__pycache__/
+**/__pycache__/
+*.pyc
+.pytest_cache/
+.coverage
+htmlcov/
+
+# env
+.env
+.env.local
+.env.*.local
 ai-engine/.env
-ai-engine/__pycache__/
-ai-engine/**/__pycache__/
-ai-engine/**/*.pyc
+
+# local data
+*.db
+*.sqlite3
