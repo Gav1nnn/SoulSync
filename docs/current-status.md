@@ -21,8 +21,12 @@ SoulSync 当前阶段只做一件事：打通最小主链路，形成“可运�
 - 三端最小 `health check`
 - 前端最小聊天页
 - 前端通过 `/api/chat` 请求 Go
-- Go 通过 HTTP 调用 Python
-- Python 返回固定 Berry 风格回复
+- Go 通过 HTTP 调用 Python `POST /generate`
+- Python 已升级为 Persona V1：
+  - 结构化 Berry persona
+  - few-shot 风格示例
+  - Ollama / DeepSeek 双 provider
+  - mock fallback
 - Go 生成 `trace_id`
 - Go 记录最小内存态 trace
 - 前后端联调已通过
@@ -54,7 +58,7 @@ SoulSync 当前阶段只做一件事：打通最小主链路，形成“可运�
 ## 限制
 
 - trace 目前只保存在内存里，服务重启后会丢失
-- Berry 回复目前是固定模板，不代表真实 AI 能力已经接入
+- 未配置模型时，Berry 回复会回退到 persona mock
 - 当前接口结构还处于早期阶段，后续还会继续收敛
 
 ## 下一步计划
@@ -62,9 +66,9 @@ SoulSync 当前阶段只做一件事：打通最小主链路，形成“可运�
 建议按下面顺序推进：
 
 1. 给 backend 增加最小 trace 查看接口，便于观察链路记录
-2. 稳定 `POST /api/chat` 的响应结构，为后续 Memory / RAG 预留位置
-3. 把 ai-engine 的固定回复升级为可配置 Prompt
-4. 再往后才接真实模型、Memory 和 RAG
+2. 在 Persona V1 之上接入最小 RAG
+3. 给 backend 增加结构化 Memory 主存储
+4. 再往后补 Trace 查询和更完整的评测/观测
 
 ## 维护规则
 
