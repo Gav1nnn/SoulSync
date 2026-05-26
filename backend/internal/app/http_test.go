@@ -3,23 +3,44 @@ package app
 import (
 	"bytes"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 )
 
 func TestChatReturnsReplyAndTraceID(t *testing.T) {
-	aiEngine := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodPost || r.URL.Path != "/reply" {
-			t.Fatalf("unexpected request: %s %s", r.Method, r.URL.Path)
-		}
+	aiClient := NewAIClientWithHTTPClient("http://ai-engine.local", &http.Client{
+		Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
+			if r.Method != http.MethodPost || r.URL.Path != "/generate" {
+				t.Fatalf("unexpected request: %s %s", r.Method, r.URL.Path)
+			}
 
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"reply":"Berry reply","persona":"Berry","context_used":["persona"]}`))
-	}))
-	defer aiEngine.Close()
+			var request AIGenerateRequest
+			if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+				t.Fatalf("decode ai request: %v", err)
+			}
+			if request.UserMessage != "帮我写一个列表页" {
+				t.Fatalf("unexpected user message: %q", request.UserMessage)
+			}
+			if request.CharacterID != defaultCharacterID || request.CharacterName != defaultCharacterName {
+				t.Fatalf("unexpected character payload: %#v", request)
+			}
+			if request.Persona.Background == "" || len(request.Persona.SampleLines) == 0 {
+				t.Fatalf("expected default persona to be populated: %#v", request.Persona)
+			}
 
-	server := NewHTTPServer(NewService(NewAIClient(aiEngine.URL), NewTraceStore())).Router()
+			return &http.Response{
+				StatusCode: http.StatusOK,
+				Header:     http.Header{"Content-Type": []string{"application/json"}},
+				Body: io.NopCloser(bytes.NewBufferString(
+					`{"reply":"Berry reply","persona":"Berry","context_used":["persona","persona.examples","mock_fallback"],"used_persona":true,"used_memory_ids":[],"used_knowledge_chunk_ids":[],"memory_written":false}`,
+				)),
+			}, nil
+		}),
+	})
+
+	server := NewHTTPServer(NewService(aiClient, NewTraceStore())).Router()
 	body := bytes.NewBufferString(`{"message":"帮我写一个列表页"}`)
 	request := httptest.NewRequest(http.MethodPost, "/api/chat", body)
 	request.Header.Set("Content-Type", "application/json")
@@ -40,7 +61,7 @@ func TestChatReturnsReplyAndTraceID(t *testing.T) {
 		t.Fatalf("unexpected reply: %q", response.Reply)
 	}
 
-	if response.Persona != personaName {
+	if response.Persona != defaultCharacterName {
 		t.Fatalf("unexpected persona: %q", response.Persona)
 	}
 
@@ -64,12 +85,17 @@ func TestChatRejectsEmptyMessage(t *testing.T) {
 }
 
 func TestChatReturnsBadGatewayWhenAIUnavailable(t *testing.T) {
-	aiEngine := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		http.Error(w, "upstream error", http.StatusInternalServerError)
-	}))
-	defer aiEngine.Close()
+	aiClient := NewAIClientWithHTTPClient("http://ai-engine.local", &http.Client{
+		Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
+			return &http.Response{
+				StatusCode: http.StatusInternalServerError,
+				Header:     http.Header{"Content-Type": []string{"text/plain"}},
+				Body:       io.NopCloser(bytes.NewBufferString("upstream error")),
+			}, nil
+		}),
+	})
 
-	server := NewHTTPServer(NewService(NewAIClient(aiEngine.URL), NewTraceStore())).Router()
+	server := NewHTTPServer(NewService(aiClient, NewTraceStore())).Router()
 	body := bytes.NewBufferString(`{"message":"帮我看下组件拆分"}`)
 	request := httptest.NewRequest(http.MethodPost, "/api/chat", body)
 	request.Header.Set("Content-Type", "application/json")
@@ -80,4 +106,10 @@ func TestChatReturnsBadGatewayWhenAIUnavailable(t *testing.T) {
 	if recorder.Code != http.StatusBadGateway {
 		t.Fatalf("expected status 502, got %d", recorder.Code)
 	}
+}
+
+type roundTripFunc func(*http.Request) (*http.Response, error)
+
+func (f roundTripFunc) RoundTrip(r *http.Request) (*http.Response, error) {
+	return f(r)
 }

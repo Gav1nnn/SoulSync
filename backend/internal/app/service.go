@@ -28,7 +28,12 @@ func (s *Service) Chat(ctx context.Context, message string) (ChatResponse, error
 	startedAt := time.Now()
 	traceID := fmt.Sprintf("trace-%d", startedAt.UnixNano())
 
-	reply, err := s.aiClient.Reply(ctx, AIReplyRequest{Message: trimmedMessage})
+	reply, err := s.aiClient.Generate(ctx, AIGenerateRequest{
+		UserMessage:   trimmedMessage,
+		CharacterID:   defaultCharacterID,
+		CharacterName: defaultCharacterName,
+		Persona:       DefaultBerryPersona(),
+	})
 	if err != nil {
 		return ChatResponse{}, fmt.Errorf("%w: %v", ErrAIUnavailable, err)
 	}
