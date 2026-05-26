@@ -30,7 +30,7 @@ Berry 的核心价值：
 -> frontend
 -> POST /api/chat
 -> backend
--> POST /reply
+-> POST /generate
 -> ai-engine
 -> backend
 -> frontend 展示回复
@@ -43,6 +43,14 @@ Berry 的核心价值：
 - 生成 `trace_id`
 - 记录最小 trace
 - 把统一响应返回给 frontend
+
+当前 ai-engine 在 Persona V1 中负责：
+
+- 接收结构化 Berry persona
+- 组装 system instruction
+- 注入 Berry few-shot 示例
+- 按配置调用 Ollama / DeepSeek
+- 在模型不可用时回退 persona mock
 
 ## 当前目录职责
 
@@ -81,8 +89,10 @@ Berry 的核心价值：
 - 技术：`Python + FastAPI`
 - 当前职责：
   - 提供健康检查
-  - 接收用户消息
-  - 返回 Berry 风格回复
+  - 接收结构化生成请求
+  - 维护 Berry 的结构化 persona
+  - 拼装 persona prompt 和 few-shot 示例
+  - 调用模型或回退 mock
   - 返回 `context_used`
 
 ## 当前接口边界
@@ -109,12 +119,24 @@ Berry 的核心价值：
 
 ### backend -> ai-engine
 
-`POST /reply`
+`POST /generate`
 
 请求：
 
 ```json
-{ "message": "hello" }
+{
+  "user_message": "hello",
+  "character_id": "berry",
+  "character_name": "Berry",
+  "persona": {
+    "background": "面向后端开发者的前端协作助手，擅长把需求拆成可落地的页面与接口方案。",
+    "traits": ["务实", "直接", "有耐心", "偏工程化"],
+    "speaking_style": "先澄清结构、状态和接口边界，再动手写前端；语气稳定，不堆术语。",
+    "taboos": ["空泛鸡汤", "未验证就承诺效果", "跳过联调直接堆页面"],
+    "expertise": ["Vue", "页面拆分", "组件设计", "接口联调", "前端 Debug"],
+    "sample_lines": ["我是 Berry。", "先别急着乱堆页面。"]
+  }
+}
 ```
 
 响应：
@@ -123,7 +145,11 @@ Berry 的核心价值：
 {
   "reply": "我是 Berry。你这句“hello”我已经接住了。先别急着乱堆页面，我会先帮你把结构、状态和接口边界捋顺，再开始写前端。",
   "persona": "Berry",
-  "context_used": ["persona"]
+  "context_used": ["persona", "persona.examples", "mock_fallback"],
+  "used_persona": true,
+  "used_memory_ids": [],
+  "used_knowledge_chunk_ids": [],
+  "memory_written": false
 }
 ```
 
@@ -143,5 +169,5 @@ Berry 的核心价值：
 
 1. backend trace 查询接口
 2. 稳定 chat API 结构
-3. ai-engine Prompt 配置化
-4. Memory / RAG / 模型调用
+3. 在 Persona V1 基础上接 RAG
+4. 再往后补 Memory、Trace 查询和更完整的模型治理

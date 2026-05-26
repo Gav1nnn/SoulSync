@@ -20,8 +20,35 @@
 cd ai-engine
 uv venv .venv
 uv pip install --python .venv/bin/python -r requirements.txt
+cp .env.example .env
 uv run --python .venv/bin/python uvicorn app.main:app --host 127.0.0.1 --port 8000
 ```
+
+可选配置：
+
+- `LLM_DISABLED=true`
+  - 强制走 Berry persona mock，适合第一次联调
+- `LLM_PROVIDER=ollama`
+  - 使用本地 Ollama
+- `LLM_PROVIDER=deepseek`
+  - 使用 DeepSeek API
+
+推荐本地调试步骤：
+
+```bash
+cd ai-engine
+cp .env.example .env
+```
+
+默认 `.env.example` 已设置为 `Ollama` 本地调用。  
+如果本地没有启动 Ollama，ai-engine 会回退到 `mock fallback`。  
+上线时再把 `.env` 改成 `DeepSeek` 配置即可。
+
+说明：
+
+- `LLM_TIMEOUT_SECONDS`
+  - 当前默认 `180`
+  - 本地 Ollama 首次加载大模型可能较慢，超时后会自动回退到 `mock fallback`
 
 ### 2. 启动 backend
 
@@ -73,7 +100,16 @@ npm run build
 
 ```bash
 cd ai-engine
-./.venv/bin/python -m py_compile app/main.py
+./.venv/bin/python -m py_compile \
+  app/main.py \
+  app/schemas.py \
+  app/persona/profile.py \
+  app/persona/prompt_builder.py \
+  app/persona/examples.py \
+  app/persona/mock.py \
+  app/llm/client.py \
+  app/orchestration/generate_reply.py
+./.venv/bin/python -m unittest discover -s tests -p 'test_*.py'
 ```
 
 ## 手动联调
@@ -94,9 +130,9 @@ http://127.0.0.1:5173/health
 ### AI 服务直连
 
 ```bash
-curl -X POST http://127.0.0.1:8000/reply \
+curl -X POST http://127.0.0.1:8000/generate \
   -H 'Content-Type: application/json' \
-  -d '{"message":"hello"}'
+  -d '{"user_message":"hello"}'
 ```
 
 ### 后端主链路
@@ -148,7 +184,7 @@ uv run --python .venv/bin/python uvicorn app.main:app \
 
 1. `curl http://127.0.0.1:8080/healthz`
 2. `curl http://127.0.0.1:8000/healthz`
-3. `curl -X POST http://127.0.0.1:8000/reply ...`
+3. `curl -X POST http://127.0.0.1:8000/generate ...`
 4. 再测 `POST /api/chat`
 
 ## 文档边界
