@@ -9,5 +9,7 @@ backend/bin/
 
 # ai-engine
 ai-engine/.venv/
+ai-engine/.env
 ai-engine/__pycache__/
+ai-engine/**/__pycache__/
 ai-engine/**/*.pyc
