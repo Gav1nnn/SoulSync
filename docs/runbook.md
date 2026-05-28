@@ -49,6 +49,27 @@ cp .env.example .env
 - `LLM_TIMEOUT_SECONDS`
   - 当前默认 `180`
   - 本地 Ollama 首次加载大模型可能较慢，超时后会自动回退到 `mock fallback`
+- 当前 RAG V1 默认检索仓库 `docs/`
+  - 先走 Ollama 的 `qwen3-embedding:0.6b` 检索
+  - 再用关键词结果做补充融合
+  - embedding 模型不可用时会自动回退到关键词检索
+  - 当前不依赖外部向量数据库
+
+先确保本地已经拉好两个 Ollama 模型：
+
+```bash
+ollama pull qwen3.5:4b
+ollama pull qwen3-embedding:0.6b
+```
+
+对应的 `.env` 默认配置是：
+
+```env
+RAG_EMBEDDING_PROVIDER=ollama
+RAG_EMBEDDING_BASE_URL=http://127.0.0.1:11434
+RAG_EMBEDDING_MODEL=qwen3-embedding:0.6b
+RAG_EMBEDDING_TIMEOUT_SECONDS=60
+```
 
 ### 2. 启动 backend
 
@@ -108,7 +129,14 @@ cd ai-engine
   app/persona/examples.py \
   app/persona/mock.py \
   app/llm/client.py \
-  app/orchestration/generate_reply.py
+  app/orchestration/generate_reply.py \
+  app/retrieval/config.py \
+  app/retrieval/embedder.py \
+  app/retrieval/index_store.py \
+  app/retrieval/schemas.py \
+  app/retrieval/chunker.py \
+  app/retrieval/loader.py \
+  app/retrieval/retriever.py
 ./.venv/bin/python -m unittest discover -s tests -p 'test_*.py'
 ```
 
@@ -134,6 +162,15 @@ curl -X POST http://127.0.0.1:8000/generate \
   -H 'Content-Type: application/json' \
   -d '{"user_message":"hello"}'
 ```
+
+如果 `docs/` 中命中相关内容，返回里的 `used_knowledge_chunk_ids` 会是非空数组。
+
+常见的 `context_used` 组合：
+
+- `knowledge`, `knowledge.embedding`, `knowledge.keyword`
+  - 表示用了 embedding + 关键词融合检索
+- `knowledge`, `knowledge.keyword`, `knowledge.lexical_fallback`
+  - 表示 embedding 不可用，回退到了关键词检索
 
 ### 后端主链路
 

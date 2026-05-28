@@ -15,6 +15,7 @@ backend/bin/
 # ai-engine
 .venv/
 ai-engine/.venv/
+ai-engine/.cache/
 __pycache__/
 **/__pycache__/
 *.pyc

@@ -27,6 +27,12 @@ SoulSync 当前阶段只做一件事：打通最小主链路，形成“可运�
   - few-shot 风格示例
   - Ollama / DeepSeek 双 provider
   - mock fallback
+- Python 已接入 RAG V1：
+  - 只检索 `docs/`
+  - Ollama `qwen3-embedding:0.6b` + 关键词混合检索
+  - embedding 结果会缓存到本地索引文件
+  - 命中时返回 `used_knowledge_chunk_ids`
+  - 检索失败时不阻断主链路
 - Go 生成 `trace_id`
 - Go 记录最小内存态 trace
 - 前后端联调已通过
@@ -50,8 +56,6 @@ SoulSync 当前阶段只做一件事：打通最小主链路，形成“可运�
 - 数据库
 - 消息持久化
 - 长期 Memory
-- RAG 检索
-- 真实模型调用
 - Trace 查询接口
 - 在线 IDE / 沙盒
 
@@ -59,16 +63,17 @@ SoulSync 当前阶段只做一件事：打通最小主链路，形成“可运�
 
 - trace 目前只保存在内存里，服务重启后会丢失
 - 未配置模型时，Berry 回复会回退到 persona mock
+- 当前 RAG 只覆盖仓库 `docs/`，未接 rerank 和外部向量数据库
 - 当前接口结构还处于早期阶段，后续还会继续收敛
 
 ## 下一步计划
 
 建议按下面顺序推进：
 
-1. 给 backend 增加最小 trace 查看接口，便于观察链路记录
-2. 在 Persona V1 之上接入最小 RAG
-3. 给 backend 增加结构化 Memory 主存储
-4. 再往后补 Trace 查询和更完整的评测/观测
+1. 给 backend 增加结构化 Memory 主存储
+2. 补最小 Trace 查询接口
+3. 再补 Memory 提取和注入链路
+4. 再往后补 rerank / 外部向量库 / 更完整的评测
 
 ## 维护规则
 

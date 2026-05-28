@@ -49,6 +49,8 @@ Berry 的核心价值：
 - 接收结构化 Berry persona
 - 组装 system instruction
 - 注入 Berry few-shot 示例
+- 用 Ollama `qwen3-embedding:0.6b` 检索 `docs/` 中与当前问题相关的知识块
+- 在 embedding 不可用时回退关键词检索
 - 按配置调用 Ollama / DeepSeek
 - 在模型不可用时回退 persona mock
 
@@ -90,10 +92,11 @@ Berry 的核心价值：
 - 当前职责：
   - 提供健康检查
   - 接收结构化生成请求
-  - 维护 Berry 的结构化 persona
-  - 拼装 persona prompt 和 few-shot 示例
-  - 调用模型或回退 mock
-  - 返回 `context_used`
+- 维护 Berry 的结构化 persona
+- 维护本地 `docs/` 检索层和 embedding 索引缓存
+- 拼装 persona prompt 和 few-shot 示例
+- 把命中的知识块注入给模型或 mock
+- 返回 `context_used`
 
 ## 当前接口边界
 
@@ -145,10 +148,10 @@ Berry 的核心价值：
 {
   "reply": "我是 Berry。你这句“hello”我已经接住了。先别急着乱堆页面，我会先帮你把结构、状态和接口边界捋顺，再开始写前端。",
   "persona": "Berry",
-  "context_used": ["persona", "persona.examples", "mock_fallback"],
+  "context_used": ["persona", "persona.examples", "knowledge", "knowledge.embedding", "knowledge.keyword", "ollama"],
   "used_persona": true,
   "used_memory_ids": [],
-  "used_knowledge_chunk_ids": [],
+  "used_knowledge_chunk_ids": ["chunk-abc123def456"],
   "memory_written": false
 }
 ```
@@ -169,5 +172,5 @@ Berry 的核心价值：
 
 1. backend trace 查询接口
 2. 稳定 chat API 结构
-3. 在 Persona V1 基础上接 RAG
-4. 再往后补 Memory、Trace 查询和更完整的模型治理
+3. 在 docs-based RAG 基础上接 Memory
+4. 再往后补 rerank、外部向量库和更完整的模型治理
