@@ -31,6 +31,7 @@ class PersonaFlowTests(unittest.TestCase):
         self.assertIn("Berry", instruction)
         self.assertIn(persona.background, instruction)
         self.assertIn("Vue", instruction)
+        self.assertIn("毒舌学姐感", instruction)
         self.assertIn("不要空泛鸡汤", instruction)
 
     def test_few_shot_messages_are_available(self) -> None:
@@ -39,6 +40,7 @@ class PersonaFlowTests(unittest.TestCase):
         self.assertGreaterEqual(len(messages), 8)
         self.assertEqual(messages[0]["role"], "user")
         self.assertEqual(messages[1]["role"], "assistant")
+        self.assertIn("想得倒挺省事", messages[1]["content"])
 
     @patch("app.orchestration.generate_reply.retrieve_knowledge_result")
     @patch("app.orchestration.generate_reply.generate_persona_reply_with_knowledge")
