@@ -4,6 +4,7 @@ import type { ChatErrorCode, ChatStatus } from "../../types/chat";
 defineProps<{
   status: ChatStatus;
   traceId: string;
+  contextUsed: string[];
   errorMessage: string;
   errorCode: ChatErrorCode | null;
 }>();
@@ -48,8 +49,8 @@ const statusLabels: Record<ChatStatus, string> = {
 
     <section class="status-card">
       <p class="label">Context Used</p>
-      <p class="value code">pending backend exposure</p>
-      <p class="detail">展示位先留好，等 backend 把 `context_used` 往前端透出后再接入。</p>
+      <p class="value code">{{ contextUsed.length ? contextUsed.join(", ") : "waiting" }}</p>
+      <p class="detail">这里展示本轮实际注入的上下文，方便确认有没有走到 persona、knowledge 或 fallback。</p>
     </section>
 
     <section class="status-card">

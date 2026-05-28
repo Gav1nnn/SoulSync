@@ -55,7 +55,7 @@ export async function sendChatMessage(message: string): Promise<ChatResponse> {
     );
   }
 
-  if (!payload.reply || !payload.trace_id || !payload.persona) {
+  if (!payload.reply || !payload.trace_id || !payload.persona || !Array.isArray(payload.context_used)) {
     throw new ChatApiError("后端响应结构不完整，请检查接口返回。", "unknown");
   }
 

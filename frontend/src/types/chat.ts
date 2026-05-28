@@ -12,6 +12,7 @@ export type ChatResponse = {
   reply: string;
   trace_id: string;
   persona: string;
+  context_used: string[];
 };
 
 export type ChatErrorCode =
