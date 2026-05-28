@@ -68,6 +68,10 @@ func TestChatReturnsReplyAndTraceID(t *testing.T) {
 	if response.TraceID == "" {
 		t.Fatal("expected trace id to be populated")
 	}
+
+	if len(response.ContextUsed) != 3 || response.ContextUsed[0] != "persona" {
+		t.Fatalf("unexpected context used: %#v", response.ContextUsed)
+	}
 }
 
 func TestChatRejectsEmptyMessage(t *testing.T) {

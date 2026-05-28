@@ -50,8 +50,9 @@ func (s *Service) Chat(ctx context.Context, message string) (ChatResponse, error
 	})
 
 	return ChatResponse{
-		Reply:   reply.Reply,
-		TraceID: traceID,
-		Persona: reply.Persona,
+		Reply:       reply.Reply,
+		TraceID:     traceID,
+		Persona:     reply.Persona,
+		ContextUsed: reply.ContextUsed,
 	}, nil
 }

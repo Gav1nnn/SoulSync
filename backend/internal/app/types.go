@@ -7,9 +7,10 @@ type ChatRequest struct {
 }
 
 type ChatResponse struct {
-	Reply   string `json:"reply"`
-	TraceID string `json:"trace_id"`
-	Persona string `json:"persona"`
+	Reply       string   `json:"reply"`
+	TraceID     string   `json:"trace_id"`
+	Persona     string   `json:"persona"`
+	ContextUsed []string `json:"context_used"`
 }
 
 type PersonaProfile struct {
