@@ -9,6 +9,7 @@ from urllib import error, request
 from app.persona.examples import berry_few_shot_messages
 from app.persona.profile import PersonaProfile
 from app.persona.prompt_builder import build_persona_instruction
+from app.retrieval.schemas import RetrievalHit
 
 
 CHAT_COMPLETIONS_PATH = "/chat/completions"
@@ -89,23 +90,60 @@ def load_settings() -> LLMSettings:
 
 
 def generate_persona_reply(persona: PersonaProfile, character_name: str, user_message: str) -> tuple[str, str]:
+    return generate_persona_reply_with_knowledge(
+        persona,
+        character_name,
+        user_message,
+        knowledge_hits=[],
+    )
+
+
+def build_knowledge_context(knowledge_hits: list[RetrievalHit]) -> str:
+    lines = ["以下是与当前问题相关的项目资料，请优先基于这些资料回答，并在必要时明确说明资料来源："]
+
+    for index, hit in enumerate(knowledge_hits, start=1):
+        chunk = hit.chunk
+        lines.append(
+            f"[{index}] id={chunk.chunk_id} source={chunk.source_path} section={chunk.section}\n{chunk.content}"
+        )
+
+    return "\n\n".join(lines)
+
+
+def generate_persona_reply_with_knowledge(
+    persona: PersonaProfile,
+    character_name: str,
+    user_message: str,
+    knowledge_hits: list[RetrievalHit],
+) -> tuple[str, str]:
     settings = load_settings()
     if not settings.enabled:
         raise LLMClientError("llm is disabled")
 
-    payload = {
-        "model": settings.model,
-        "messages": [
+    messages: list[dict[str, str]] = [
+        {
+            "role": "system",
+            "content": build_persona_instruction(persona, character_name),
+        },
+        *berry_few_shot_messages(),
+    ]
+    if knowledge_hits:
+        messages.append(
             {
                 "role": "system",
-                "content": build_persona_instruction(persona, character_name),
-            },
-            *berry_few_shot_messages(),
-            {
-                "role": "user",
-                "content": user_message,
-            },
-        ],
+                "content": build_knowledge_context(knowledge_hits),
+            }
+        )
+    messages.append(
+        {
+            "role": "user",
+            "content": user_message,
+        }
+    )
+
+    payload = {
+        "model": settings.model,
+        "messages": messages,
         "stream": False,
     }
 
