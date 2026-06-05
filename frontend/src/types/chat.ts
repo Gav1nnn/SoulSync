@@ -13,6 +13,9 @@ export type ChatResponse = {
   trace_id: string;
   persona: string;
   context_used: string[];
+  used_memory_ids: string[];
+  memory_written: boolean;
+  memory_candidate_count: number;
 };
 
 export type ChatErrorCode =

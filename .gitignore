@@ -30,5 +30,7 @@ htmlcov/
 ai-engine/.env
 
 # local data
+.data/
+backend/.data/
 *.db
 *.sqlite3

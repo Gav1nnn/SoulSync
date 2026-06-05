@@ -13,6 +13,9 @@ const errorMessage = ref("");
 const errorCode = ref<ChatErrorCode | null>(null);
 const traceId = ref("");
 const contextUsed = ref<string[]>([]);
+const usedMemoryIds = ref<string[]>([]);
+const memoryWritten = ref(false);
+const memoryCandidateCount = ref(0);
 const messages = ref<ChatMessage[]>([]);
 
 async function sendMessage() {
@@ -37,6 +40,9 @@ async function sendMessage() {
 
     traceId.value = response.trace_id;
     contextUsed.value = response.context_used;
+    usedMemoryIds.value = response.used_memory_ids;
+    memoryWritten.value = response.memory_written;
+    memoryCandidateCount.value = response.memory_candidate_count;
     messages.value.push({
       id: response.trace_id,
       role: "assistant",
@@ -77,6 +83,9 @@ async function sendMessage() {
           :status="status"
           :trace-id="traceId"
           :context-used="contextUsed"
+          :used-memory-ids="usedMemoryIds"
+          :memory-written="memoryWritten"
+          :memory-candidate-count="memoryCandidateCount"
           :error-message="errorMessage"
           :error-code="errorCode"
         />

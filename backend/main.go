@@ -26,7 +26,16 @@ func main() {
 		}
 	}
 
-	service := app.NewService(app.NewAIClientWithTimeout(aiEngineBaseURL, aiEngineTimeout), app.NewTraceStore())
+	memoryStorePath := os.Getenv("MEMORY_STORE_PATH")
+	if memoryStorePath == "" {
+		memoryStorePath = ".data/memory-store.json"
+	}
+	memoryStore, err := app.NewMemoryStore(memoryStorePath)
+	if err != nil {
+		panic(err)
+	}
+
+	service := app.NewService(app.NewAIClientWithTimeout(aiEngineBaseURL, aiEngineTimeout), app.NewTraceStore(), memoryStore)
 	router := app.NewHTTPServer(service).Router()
 
 	if err := router.Run(":" + port); err != nil {

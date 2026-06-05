@@ -87,11 +87,14 @@ go run .
 - `AI_ENGINE_TIMEOUT_SECONDS`
   - backend 调 ai-engine 的超时时间，默认 `120`
   - 本地 Ollama 首次加载模型较慢时，可以临时调大
+- `MEMORY_STORE_PATH`
+  - Memory V1 的本地持久化文件，默认 `.data/memory-store.json`
+  - 保存消息日志、长期记忆和记忆来源信息
 
 示例：
 
 ```bash
-AI_ENGINE_BASE_URL=http://127.0.0.1:8000 AI_ENGINE_TIMEOUT_SECONDS=180 go run .
+AI_ENGINE_BASE_URL=http://127.0.0.1:8000 AI_ENGINE_TIMEOUT_SECONDS=180 MEMORY_STORE_PATH=.data/memory-store.json go run .
 ```
 
 ### 3. 启动 frontend
@@ -182,6 +185,28 @@ curl -X POST http://127.0.0.1:8080/api/chat \
   -H 'Content-Type: application/json' \
   -d '{"message":"hello"}'
 ```
+
+### Memory V1
+
+触发一次包含长期项目信息的对话：
+
+```bash
+curl -X POST http://127.0.0.1:8080/api/chat \
+  -H 'Content-Type: application/json' \
+  -d '{"message":"我们这个项目的前端栈固定用 Vue 3 和 TypeScript，后端接口由 Go Gin 提供。"}'
+```
+
+查看已保存的长期记忆：
+
+```bash
+curl http://127.0.0.1:8080/api/memories
+```
+
+验证点：
+
+- 响应里 `memory_candidate_count` 大于 `0` 时，说明 ai-engine 抽取到了候选记忆
+- 响应里 `memory_written=true` 时，说明 backend 已经保存了高置信长期记忆
+- 下一轮相关问题的 `context_used` 里出现 `memory` 时，说明 backend 已把长期记忆注入 ai-engine
 
 ### 前端联调
 

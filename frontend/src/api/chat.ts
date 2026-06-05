@@ -55,7 +55,15 @@ export async function sendChatMessage(message: string): Promise<ChatResponse> {
     );
   }
 
-  if (!payload.reply || !payload.trace_id || !payload.persona || !Array.isArray(payload.context_used)) {
+  if (
+    !payload.reply ||
+    !payload.trace_id ||
+    !payload.persona ||
+    !Array.isArray(payload.context_used) ||
+    !Array.isArray(payload.used_memory_ids) ||
+    typeof payload.memory_written !== "boolean" ||
+    typeof payload.memory_candidate_count !== "number"
+  ) {
     throw new ChatApiError("后端响应结构不完整，请检查接口返回。", "unknown");
   }
 

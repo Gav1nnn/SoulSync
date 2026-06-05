@@ -12,7 +12,7 @@ from app.retrieval.chunker import chunk_markdown_document
 from app.retrieval.embedder import EmbeddingUnavailableError
 from app.retrieval.retriever import retrieve_knowledge_result, tokenize
 from app.retrieval.schemas import RetrievalHit, RetrievalResult
-from app.schemas import GenerateRequest
+from app.schemas import GenerateRequest, MemoryCandidate, MemoryContext
 
 
 class PersonaFlowTests(unittest.TestCase):
@@ -42,12 +42,14 @@ class PersonaFlowTests(unittest.TestCase):
         self.assertEqual(messages[1]["role"], "assistant")
         self.assertIn("想得倒挺省事", messages[1]["content"])
 
+    @patch("app.orchestration.generate_reply.extract_memory_candidates")
     @patch("app.orchestration.generate_reply.retrieve_knowledge_result")
-    @patch("app.orchestration.generate_reply.generate_persona_reply_with_knowledge")
+    @patch("app.orchestration.generate_reply.generate_persona_reply_with_context")
     def test_generate_reply_uses_provider_context_on_success(
         self,
-        mock_generate_persona_reply_with_knowledge,
+        mock_generate_persona_reply_with_context,
         mock_retrieve_knowledge_result,
+        mock_extract_memory_candidates,
     ) -> None:
         chunk = chunk_markdown_document(
             "docs/architecture.md",
@@ -57,7 +59,15 @@ class PersonaFlowTests(unittest.TestCase):
             hits=[RetrievalHit(chunk=chunk, score=0.92)],
             strategies=["knowledge.embedding", "knowledge.keyword"],
         )
-        mock_generate_persona_reply_with_knowledge.return_value = ("Berry real reply", "ollama")
+        mock_generate_persona_reply_with_context.return_value = ("Berry real reply", "ollama")
+        mock_extract_memory_candidates.return_value = [
+            MemoryCandidate(
+                type="project_fact",
+                content="项目通过 Go 调用 ai-engine。",
+                reason="用户询问当前项目的人设和链路。",
+                confidence=0.82,
+            )
+        ]
         request = GenerateRequest(user_message="你记得你的人设是什么吗")
 
         response = generate_reply(request)
@@ -72,16 +82,19 @@ class PersonaFlowTests(unittest.TestCase):
         self.assertEqual(response.used_memory_ids, [])
         self.assertEqual(response.used_knowledge_chunk_ids, [chunk.chunk_id])
         self.assertFalse(response.memory_written)
+        self.assertEqual(len(response.memory_candidates), 1)
 
+    @patch("app.orchestration.generate_reply.extract_memory_candidates")
     @patch("app.orchestration.generate_reply.retrieve_knowledge_result")
-    @patch("app.orchestration.generate_reply.generate_persona_reply_with_knowledge")
+    @patch("app.orchestration.generate_reply.generate_persona_reply_with_context")
     def test_generate_reply_falls_back_to_mock_when_llm_fails(
         self,
-        mock_generate_persona_reply_with_knowledge,
+        mock_generate_persona_reply_with_context,
         mock_retrieve_knowledge_result,
+        mock_extract_memory_candidates,
     ) -> None:
         mock_retrieve_knowledge_result.return_value = RetrievalResult(hits=[], strategies=[])
-        mock_generate_persona_reply_with_knowledge.side_effect = LLMClientError("llm request timed out")
+        mock_generate_persona_reply_with_context.side_effect = LLMClientError("llm request timed out")
         request = GenerateRequest(user_message="帮我拆一个列表页")
 
         response = generate_reply(request)
@@ -90,6 +103,36 @@ class PersonaFlowTests(unittest.TestCase):
         self.assertEqual(response.context_used, ["persona", "persona.examples", "mock_fallback"])
         self.assertTrue(response.used_persona)
         self.assertEqual(response.used_knowledge_chunk_ids, [])
+        mock_extract_memory_candidates.assert_not_called()
+
+    @patch("app.orchestration.generate_reply.extract_memory_candidates")
+    @patch("app.orchestration.generate_reply.retrieve_knowledge_result")
+    @patch("app.orchestration.generate_reply.generate_persona_reply_with_context")
+    def test_generate_reply_injects_memories(
+        self,
+        mock_generate_persona_reply_with_context,
+        mock_retrieve_knowledge_result,
+        mock_extract_memory_candidates,
+    ) -> None:
+        mock_retrieve_knowledge_result.return_value = RetrievalResult(hits=[], strategies=[])
+        mock_generate_persona_reply_with_context.return_value = ("Berry memory reply", "ollama")
+        mock_extract_memory_candidates.return_value = []
+        request = GenerateRequest(
+            user_message="按我们的项目约定继续拆页面",
+            memories=[
+                MemoryContext(
+                    id="mem-1",
+                    type="frontend_convention",
+                    content="项目页面优先按容器组件和业务组件拆分。",
+                )
+            ],
+        )
+
+        response = generate_reply(request)
+
+        self.assertEqual(response.used_memory_ids, ["mem-1"])
+        self.assertEqual(response.context_used, ["persona", "persona.examples", "memory", "ollama"])
+        mock_generate_persona_reply_with_context.assert_called_once()
 
     @patch.dict(
         "os.environ",
