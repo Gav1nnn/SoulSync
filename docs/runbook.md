@@ -84,11 +84,14 @@ go run .
   - backend 监听端口，默认 `8080`
 - `AI_ENGINE_BASE_URL`
   - ai-engine 地址，默认 `http://localhost:8000`
+- `AI_ENGINE_TIMEOUT_SECONDS`
+  - backend 调 ai-engine 的超时时间，默认 `120`
+  - 本地 Ollama 首次加载模型较慢时，可以临时调大
 
 示例：
 
 ```bash
-AI_ENGINE_BASE_URL=http://127.0.0.1:8000 go run .
+AI_ENGINE_BASE_URL=http://127.0.0.1:8000 AI_ENGINE_TIMEOUT_SECONDS=180 go run .
 ```
 
 ### 3. 启动 frontend
