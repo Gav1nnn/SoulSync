@@ -161,7 +161,7 @@ class PersonaFlowTests(unittest.TestCase):
             "LLM_PROVIDER": "deepseek",
             "DEEPSEEK_API_KEY": "",
             "DEEPSEEK_BASE_URL": "https://api.deepseek.com",
-            "DEEPSEEK_MODEL": "deepseek-chat",
+            "DEEPSEEK_MODEL": "deepseek-v4-flash",
         },
         clear=True,
     )
@@ -170,6 +170,39 @@ class PersonaFlowTests(unittest.TestCase):
 
         self.assertEqual(settings.provider, "deepseek")
         self.assertFalse(settings.enabled)
+
+    @patch.dict(
+        "os.environ",
+        {
+            "LLM_DISABLED": "false",
+            "LLM_PROVIDER": "deepseek",
+            "DEEPSEEK_API_KEY": "test-key",
+            "DEEPSEEK_BASE_URL": "https://api.deepseek.com",
+        },
+        clear=True,
+    )
+    def test_load_settings_uses_current_deepseek_defaults(self) -> None:
+        settings = load_settings()
+
+        self.assertTrue(settings.enabled)
+        self.assertEqual(settings.provider, "deepseek")
+        self.assertEqual(settings.model, "deepseek-v4-flash")
+        self.assertTrue(settings.thinking_disabled)
+
+    @patch.dict(
+        "os.environ",
+        {
+            "LLM_DISABLED": "false",
+            "LLM_PROVIDER": "deepseek",
+            "DEEPSEEK_API_KEY": "test-key",
+            "DEEPSEEK_THINKING_ENABLED": "true",
+        },
+        clear=True,
+    )
+    def test_load_settings_can_enable_deepseek_thinking(self) -> None:
+        settings = load_settings()
+
+        self.assertFalse(settings.thinking_disabled)
 
     def test_prompt_builder_works_with_custom_persona(self) -> None:
         persona = PersonaProfile(

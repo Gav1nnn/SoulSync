@@ -40,26 +40,41 @@ cd ai-engine
 cp .env.example .env
 ```
 
-默认 `.env.example` 已设置为 `Ollama` 本地调用。  
-如果本地没有启动 Ollama，ai-engine 会回退到 `mock fallback`。  
-上线时再把 `.env` 改成 `DeepSeek` 配置即可。
+默认 `.env.example` 已设置为 `DeepSeek` 生成回复 + 本地 Ollama embedding。  
+启动前需要在 `.env` 里填入 `DEEPSEEK_API_KEY`。  
+如果想切回全本地 Ollama，可以用：
+
+```bash
+cp .env.ollama.example .env
+```
 
 说明：
 
 - `LLM_TIMEOUT_SECONDS`
-  - 当前默认 `180`
-  - 本地 Ollama 首次加载大模型可能较慢，超时后会自动回退到 `mock fallback`
+  - DeepSeek 模式默认 `60`
+  - Ollama 模式建议 `180`，本地 Ollama 首次加载大模型可能较慢
+- `DEEPSEEK_MODEL`
+  - 默认 `deepseek-v4-flash`
+  - 需要更强能力时可以改成 `deepseek-v4-pro`
+- `DEEPSEEK_THINKING_ENABLED`
+  - 默认 `false`
+  - 当前聊天和 memory 抽取优先稳定、快速返回；需要更强推理时再开启
 - 当前 RAG V1 默认检索仓库 `docs/`
   - 先走 Ollama 的 `qwen3-embedding:0.6b` 检索
   - 再用关键词结果做补充融合
   - embedding 模型不可用时会自动回退到关键词检索
   - 当前不依赖外部向量数据库
 
-先确保本地已经拉好两个 Ollama 模型：
+DeepSeek 模式下，生成回复不再依赖本地大语言模型，但 RAG embedding 仍然默认依赖本地 Ollama。先确保本地已经拉好 embedding 模型：
+
+```bash
+ollama pull qwen3-embedding:0.6b
+```
+
+如果使用 `.env.ollama.example` 切回全本地模式，再额外拉取生成模型：
 
 ```bash
 ollama pull qwen3.5:4b
-ollama pull qwen3-embedding:0.6b
 ```
 
 对应的 `.env` 默认配置是：
@@ -169,14 +184,20 @@ curl -X POST http://127.0.0.1:8000/generate \
   -d '{"user_message":"hello"}'
 ```
 
+DeepSeek 模式下，成功返回时 `context_used` 里会包含 `deepseek`；如果没有配置 `DEEPSEEK_API_KEY`，会回退到 `mock_fallback`。
+
 如果 `docs/` 中命中相关内容，返回里的 `used_knowledge_chunk_ids` 会是非空数组。
 
 常见的 `context_used` 组合：
 
+- `persona`, `persona.examples`, `deepseek`
+  - 表示使用 DeepSeek 生成回复
 - `knowledge`, `knowledge.embedding`, `knowledge.keyword`
   - 表示用了 embedding + 关键词融合检索
 - `knowledge`, `knowledge.keyword`, `knowledge.lexical_fallback`
   - 表示 embedding 不可用，回退到了关键词检索
+- `memory`
+  - 表示 backend 已经把长期记忆注入 ai-engine
 
 ### 后端主链路
 
