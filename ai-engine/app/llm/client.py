@@ -28,6 +28,7 @@ class LLMSettings:
     api_key: str
     enabled: bool
     timeout_seconds: float
+    thinking_disabled: bool
 
 
 def _env(name: str, fallback: str = "") -> str:
@@ -67,14 +68,16 @@ def load_settings() -> LLMSettings:
 
     if provider == "deepseek":
         base_url = (_env("LLM_BASE_URL") or _env("DEEPSEEK_BASE_URL") or "https://api.deepseek.com").rstrip("/")
-        model = _env("LLM_MODEL") or _env("DEEPSEEK_MODEL") or "deepseek-chat"
+        model = _env("LLM_MODEL") or _env("DEEPSEEK_MODEL") or "deepseek-v4-flash"
         api_key = _env("LLM_API_KEY") or _env("DEEPSEEK_API_KEY")
         timeout_seconds = _env_float("LLM_TIMEOUT_SECONDS", 60.0)
+        thinking_disabled = not _env_enabled("DEEPSEEK_THINKING_ENABLED")
     else:
         base_url = (_env("LLM_BASE_URL") or "http://127.0.0.1:11434/v1").rstrip("/")
         model = _env("LLM_MODEL") or "qwen3.5:4b"
         api_key = _env("LLM_API_KEY") or "ollama"
         timeout_seconds = _env_float("LLM_TIMEOUT_SECONDS", 180.0)
+        thinking_disabled = False
 
     enabled = llm_enabled()
     if provider == "deepseek" and not api_key:
@@ -87,6 +90,7 @@ def load_settings() -> LLMSettings:
         api_key=api_key,
         enabled=enabled,
         timeout_seconds=timeout_seconds,
+        thinking_disabled=thinking_disabled,
     )
 
 
@@ -120,12 +124,24 @@ def build_memory_context(memories: list[MemoryContext]) -> str:
     return "\n\n".join(lines)
 
 
-def request_chat_completion(settings: LLMSettings, messages: list[dict[str, str]]) -> str:
-    payload = {
+def request_chat_completion(
+    settings: LLMSettings,
+    messages: list[dict[str, str]],
+    *,
+    response_format: dict[str, str] | None = None,
+    max_tokens: int | None = None,
+) -> str:
+    payload: dict[str, object] = {
         "model": settings.model,
         "messages": messages,
         "stream": False,
     }
+    if settings.provider == "deepseek" and settings.thinking_disabled:
+        payload["thinking"] = {"type": "disabled"}
+    if response_format:
+        payload["response_format"] = response_format
+    if max_tokens is not None:
+        payload["max_tokens"] = max_tokens
 
     headers = {"Content-Type": "application/json"}
     if settings.api_key:
@@ -238,7 +254,13 @@ def extract_memory_candidates(user_message: str, assistant_reply: str) -> list[M
     ]
 
     try:
-        content = request_chat_completion(settings, messages)
+        response_format = {"type": "json_object"} if settings.provider == "deepseek" else None
+        content = request_chat_completion(
+            settings,
+            messages,
+            response_format=response_format,
+            max_tokens=800,
+        )
         raw = content.strip()
         if raw.startswith("```"):
             raw = raw.strip("`")
