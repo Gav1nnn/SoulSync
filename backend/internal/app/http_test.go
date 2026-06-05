@@ -151,6 +151,55 @@ func TestMemoriesEndpointReturnsSavedMemories(t *testing.T) {
 	}
 }
 
+func TestChatSendsRecentMessagesToAIEngine(t *testing.T) {
+	callCount := 0
+	aiClient := NewAIClientWithHTTPClient("http://ai-engine.local", &http.Client{
+		Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
+			callCount++
+			var request AIGenerateRequest
+			if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+				t.Fatalf("decode ai request: %v", err)
+			}
+
+			if callCount == 2 {
+				if len(request.RecentMessages) == 0 {
+					t.Fatal("expected recent messages to be sent on second request")
+				}
+				if request.RecentMessages[0].Role != "user" || request.RecentMessages[0].Content != "你好，我叫 Gavin" {
+					t.Fatalf("unexpected recent messages: %#v", request.RecentMessages)
+				}
+			}
+
+			return &http.Response{
+				StatusCode: http.StatusOK,
+				Header:     http.Header{"Content-Type": []string{"application/json"}},
+				Body: io.NopCloser(bytes.NewBufferString(
+					`{"reply":"Berry reply","persona":"Berry","context_used":["persona","persona.examples","deepseek"],"used_persona":true,"used_memory_ids":[],"used_knowledge_chunk_ids":[],"memory_written":false,"memory_candidates":[]}`,
+				)),
+			}, nil
+		}),
+	})
+	server := NewHTTPServer(newTestService(t, aiClient)).Router()
+
+	firstBody := bytes.NewBufferString(`{"message":"你好，我叫 Gavin"}`)
+	firstRequest := httptest.NewRequest(http.MethodPost, "/api/chat", firstBody)
+	firstRequest.Header.Set("Content-Type", "application/json")
+	firstRecorder := httptest.NewRecorder()
+	server.ServeHTTP(firstRecorder, firstRequest)
+	if firstRecorder.Code != http.StatusOK {
+		t.Fatalf("expected first status 200, got %d", firstRecorder.Code)
+	}
+
+	secondBody := bytes.NewBufferString(`{"message":"我的名字是什么"}`)
+	secondRequest := httptest.NewRequest(http.MethodPost, "/api/chat", secondBody)
+	secondRequest.Header.Set("Content-Type", "application/json")
+	secondRecorder := httptest.NewRecorder()
+	server.ServeHTTP(secondRecorder, secondRequest)
+	if secondRecorder.Code != http.StatusOK {
+		t.Fatalf("expected second status 200, got %d", secondRecorder.Code)
+	}
+}
+
 func newTestService(t *testing.T, aiClient *AIClient) *Service {
 	t.Helper()
 

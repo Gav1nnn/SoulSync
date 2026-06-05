@@ -30,6 +30,7 @@ func (s *Service) Chat(ctx context.Context, message string) (ChatResponse, error
 	startedAt := time.Now()
 	traceID := fmt.Sprintf("trace-%d", startedAt.UnixNano())
 	userMessageID := fmt.Sprintf("msg-%d-user", startedAt.UnixNano())
+	recentMessages := s.memoryStore.RecentMessages(8)
 
 	if err := s.memoryStore.AppendMessage(Message{
 		ID:        userMessageID,
@@ -47,11 +48,12 @@ func (s *Service) Chat(ctx context.Context, message string) (ChatResponse, error
 	}
 
 	reply, err := s.aiClient.Generate(ctx, AIGenerateRequest{
-		UserMessage:   trimmedMessage,
-		CharacterID:   defaultCharacterID,
-		CharacterName: defaultCharacterName,
-		Persona:       DefaultBerryPersona(),
-		Memories:      memoriesToContext(memories),
+		UserMessage:    trimmedMessage,
+		CharacterID:    defaultCharacterID,
+		CharacterName:  defaultCharacterName,
+		Persona:        DefaultBerryPersona(),
+		Memories:       memoriesToContext(memories),
+		RecentMessages: messagesToConversationContext(recentMessages),
 	})
 	if err != nil {
 		return ChatResponse{}, fmt.Errorf("%w: %v", ErrAIUnavailable, err)

@@ -10,6 +10,8 @@ def generate_reply(request: GenerateRequest) -> GenerateResponse:
     used_memory_ids = [memory.id for memory in request.memories]
     if used_memory_ids:
         context_used.append("memory")
+    if request.recent_messages:
+        context_used.append("conversation")
     knowledge_hits = []
     retrieval_strategies: list[str] = []
 
@@ -36,6 +38,7 @@ def generate_reply(request: GenerateRequest) -> GenerateResponse:
             request.user_message,
             knowledge_hits,
             request.memories,
+            request.recent_messages,
         )
         generated_with_llm = True
         context_used.append(provider)

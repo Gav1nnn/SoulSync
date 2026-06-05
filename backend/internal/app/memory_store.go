@@ -53,6 +53,24 @@ func (s *MemoryStore) AppendMessage(message Message) error {
 	return s.persistLocked()
 }
 
+func (s *MemoryStore) RecentMessages(limit int) []Message {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if limit <= 0 || len(s.state.Messages) == 0 {
+		return []Message{}
+	}
+
+	start := len(s.state.Messages) - limit
+	if start < 0 {
+		start = 0
+	}
+
+	messages := make([]Message, 0, len(s.state.Messages[start:]))
+	messages = append(messages, s.state.Messages[start:]...)
+	return messages
+}
+
 func (s *MemoryStore) ListMemories() []Memory {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -153,14 +171,7 @@ func (s *MemoryStore) SaveCandidates(
 			memoryType = defaultMemoryType
 		}
 
-		normalized := normalizeMemoryContent(content)
-		existingIndex := -1
-		for memoryIndex, memory := range s.state.Memories {
-			if normalizeMemoryContent(memory.Content) == normalized {
-				existingIndex = memoryIndex
-				break
-			}
-		}
+		existingIndex := findExistingMemoryIndex(s.state.Memories, memoryType, content)
 
 		if existingIndex >= 0 {
 			memory := s.state.Memories[existingIndex]
@@ -262,6 +273,9 @@ func scoreMemory(query string, memory Memory) int {
 
 	haystack := strings.ToLower(memory.Type + " " + memory.Content)
 	score := 0
+	if memory.Type == "user_profile" && asksAboutUserProfile(query) {
+		score += 10
+	}
 	for _, token := range memoryTokens(query) {
 		if strings.Contains(haystack, token) {
 			score++
@@ -285,6 +299,106 @@ func normalizeMemoryContent(content string) string {
 	return strings.ToLower(strings.Join(strings.Fields(content), " "))
 }
 
+func findExistingMemoryIndex(memories []Memory, memoryType string, content string) int {
+	normalized := normalizeMemoryContent(content)
+	profileKey := ""
+	if memoryType == "user_profile" {
+		profileKey = userProfileMemoryKey(content)
+	}
+
+	for index, memory := range memories {
+		if memoryType == "user_profile" &&
+			memory.Type == "user_profile" &&
+			profileKey != "" &&
+			userProfileMemoryKey(memory.Content) == profileKey {
+			return index
+		}
+		if normalizeMemoryContent(memory.Content) == normalized {
+			return index
+		}
+	}
+
+	return -1
+}
+
+func userProfileMemoryKey(content string) string {
+	text := strings.ToLower(content)
+	text = strings.NewReplacer(
+		"：", " ",
+		"。", " ",
+		"，", " ",
+		"、", " ",
+		",", " ",
+		".", " ",
+		":", " ",
+		";", " ",
+		"；", " ",
+		"「", " ",
+		"」", " ",
+		"“", " ",
+		"”", " ",
+		"\"", " ",
+		"'", " ",
+		"`", " ",
+		"　", " ",
+	).Replace(text)
+	text = strings.Join(strings.Fields(text), "")
+
+	for _, phrase := range []string{
+		"用户的名字是",
+		"用户名字是",
+		"用户名叫",
+		"用户名是",
+		"用户姓名是",
+		"用户姓名叫",
+		"用户叫做",
+		"用户叫",
+		"用户是",
+		"我的名字是",
+		"我叫",
+		"名字是",
+		"姓名是",
+		"称呼我为",
+		"称呼为",
+		"叫做",
+		"用户",
+		"名字",
+		"姓名",
+		"叫",
+		"是",
+		"mynameis",
+		"callme",
+		"iam",
+		"i'm",
+	} {
+		text = strings.ReplaceAll(text, phrase, "")
+	}
+
+	return strings.Map(func(r rune) rune {
+		if unicode.IsLetter(r) || unicode.IsDigit(r) {
+			return r
+		}
+		return -1
+	}, text)
+}
+
+func asksAboutUserProfile(query string) bool {
+	markers := []string{
+		"名字",
+		"我叫什么",
+		"我叫啥",
+		"我是谁",
+		"怎么称呼",
+		"name",
+	}
+	for _, marker := range markers {
+		if strings.Contains(query, marker) {
+			return true
+		}
+	}
+	return false
+}
+
 func memoriesToContext(memories []Memory) []MemoryContext {
 	context := make([]MemoryContext, 0, len(memories))
 	for _, memory := range memories {
@@ -292,6 +406,20 @@ func memoriesToContext(memories []Memory) []MemoryContext {
 			ID:      memory.ID,
 			Content: memory.Content,
 			Type:    memory.Type,
+		})
+	}
+	return context
+}
+
+func messagesToConversationContext(messages []Message) []ConversationMessage {
+	context := make([]ConversationMessage, 0, len(messages))
+	for _, message := range messages {
+		if message.Role != "user" && message.Role != "assistant" {
+			continue
+		}
+		context = append(context, ConversationMessage{
+			Role:    message.Role,
+			Content: message.Content,
 		})
 	}
 	return context
