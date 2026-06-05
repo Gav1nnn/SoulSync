@@ -26,11 +26,12 @@ type PersonaProfile struct {
 }
 
 type AIGenerateRequest struct {
-	UserMessage   string          `json:"user_message"`
-	CharacterID   string          `json:"character_id"`
-	CharacterName string          `json:"character_name"`
-	Persona       PersonaProfile  `json:"persona"`
-	Memories      []MemoryContext `json:"memories"`
+	UserMessage    string                `json:"user_message"`
+	CharacterID    string                `json:"character_id"`
+	CharacterName  string                `json:"character_name"`
+	Persona        PersonaProfile        `json:"persona"`
+	Memories       []MemoryContext       `json:"memories"`
+	RecentMessages []ConversationMessage `json:"recent_messages"`
 }
 
 type AIGenerateResponse struct {
@@ -62,6 +63,11 @@ type MemoryContext struct {
 	ID      string `json:"id"`
 	Content string `json:"content"`
 	Type    string `json:"type"`
+}
+
+type ConversationMessage struct {
+	Role    string `json:"role"`
+	Content string `json:"content"`
 }
 
 type MemoryCandidate struct {

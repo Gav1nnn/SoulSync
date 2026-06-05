@@ -9,6 +9,11 @@ class MemoryContext(BaseModel):
     type: str = "project_fact"
 
 
+class ConversationMessage(BaseModel):
+    role: str
+    content: str
+
+
 class MemoryCandidate(BaseModel):
     type: str
     content: str
@@ -22,6 +27,7 @@ class GenerateRequest(BaseModel):
     character_name: str = "Berry"
     persona: PersonaProfile = Field(default_factory=default_berry_persona)
     memories: list[MemoryContext] = Field(default_factory=list)
+    recent_messages: list[ConversationMessage] = Field(default_factory=list)
 
 
 class GenerateResponse(BaseModel):

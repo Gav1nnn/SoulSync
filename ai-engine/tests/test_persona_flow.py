@@ -2,7 +2,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from app.llm.client import LLMClientError, current_provider, load_settings
+from app.llm.client import LLMClientError, current_provider, filter_memory_candidates, load_settings
 from app.orchestration.generate_reply import generate_reply
 from app.persona.examples import berry_few_shot_messages
 from app.persona.profile import PersonaProfile, default_berry_persona
@@ -12,7 +12,7 @@ from app.retrieval.chunker import chunk_markdown_document
 from app.retrieval.embedder import EmbeddingUnavailableError
 from app.retrieval.retriever import retrieve_knowledge_result, tokenize
 from app.retrieval.schemas import RetrievalHit, RetrievalResult
-from app.schemas import GenerateRequest, MemoryCandidate, MemoryContext
+from app.schemas import ConversationMessage, GenerateRequest, MemoryCandidate, MemoryContext
 
 
 class PersonaFlowTests(unittest.TestCase):
@@ -134,6 +134,31 @@ class PersonaFlowTests(unittest.TestCase):
         self.assertEqual(response.context_used, ["persona", "persona.examples", "memory", "ollama"])
         mock_generate_persona_reply_with_context.assert_called_once()
 
+    @patch("app.orchestration.generate_reply.extract_memory_candidates")
+    @patch("app.orchestration.generate_reply.retrieve_knowledge_result")
+    @patch("app.orchestration.generate_reply.generate_persona_reply_with_context")
+    def test_generate_reply_injects_recent_conversation(
+        self,
+        mock_generate_persona_reply_with_context,
+        mock_retrieve_knowledge_result,
+        mock_extract_memory_candidates,
+    ) -> None:
+        mock_retrieve_knowledge_result.return_value = RetrievalResult(hits=[], strategies=[])
+        mock_generate_persona_reply_with_context.return_value = ("Berry conversation reply", "ollama")
+        mock_extract_memory_candidates.return_value = []
+        request = GenerateRequest(
+            user_message="我的名字是什么",
+            recent_messages=[
+                ConversationMessage(role="user", content="你好，我叫 Gavin"),
+                ConversationMessage(role="assistant", content="记住了，Gavin。"),
+            ],
+        )
+
+        response = generate_reply(request)
+
+        self.assertEqual(response.context_used, ["persona", "persona.examples", "conversation", "ollama"])
+        mock_generate_persona_reply_with_context.assert_called_once()
+
     @patch.dict(
         "os.environ",
         {
@@ -203,6 +228,46 @@ class PersonaFlowTests(unittest.TestCase):
         settings = load_settings()
 
         self.assertFalse(settings.thinking_disabled)
+
+    def test_filter_memory_candidates_rejects_assistant_profile_as_user_profile(self) -> None:
+        candidates = [
+            MemoryCandidate(
+                type="user_profile",
+                content="用户称呼为 Berry。",
+                reason="助手自我介绍了 Berry 身份。",
+                confidence=0.8,
+            )
+        ]
+
+        self.assertEqual(filter_memory_candidates("你好，介绍一下你是谁", candidates), [])
+
+    def test_filter_memory_candidates_keeps_declared_user_name(self) -> None:
+        candidates = [
+            MemoryCandidate(
+                type="user_profile",
+                content="用户姓名是 Gavin。",
+                reason="用户明确说明了自己的名字。",
+                confidence=0.9,
+            )
+        ]
+
+        filtered = filter_memory_candidates("你好，我叫 Gavin", candidates)
+
+        self.assertEqual(len(filtered), 1)
+
+    def test_filter_memory_candidates_rejects_user_profile_question(self) -> None:
+        candidates = [
+            MemoryCandidate(
+                type="user_profile",
+                content="用户名字是Gavin",
+                reason="用户询问助手是否记得姓名。",
+                confidence=0.9,
+            )
+        ]
+
+        filtered = filter_memory_candidates("你还记得我叫什么吗", candidates)
+
+        self.assertEqual(filtered, [])
 
     def test_prompt_builder_works_with_custom_persona(self) -> None:
         persona = PersonaProfile(

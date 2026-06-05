@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import socket
 from dataclasses import dataclass
 from urllib import error, request
@@ -10,10 +11,30 @@ from app.persona.examples import berry_few_shot_messages
 from app.persona.profile import PersonaProfile
 from app.persona.prompt_builder import build_persona_instruction
 from app.retrieval.schemas import RetrievalHit
-from app.schemas import MemoryCandidate, MemoryContext
+from app.schemas import ConversationMessage, MemoryCandidate, MemoryContext
 
 
 CHAT_COMPLETIONS_PATH = "/chat/completions"
+USER_PROFILE_PATTERNS = (
+    r"我叫\s*[\w\u4e00-\u9fff]+",
+    r"我的名字是\s*[\w\u4e00-\u9fff]+",
+    r"以后叫我\s*[\w\u4e00-\u9fff]+",
+    r"叫我\s*[\w\u4e00-\u9fff]+",
+    r"称呼我为?\s*[\w\u4e00-\u9fff]+",
+    r"my name is\s+[\w-]+",
+    r"call me\s+[\w-]+",
+    r"i am\s+[\w-]+",
+    r"i'm\s+[\w-]+",
+)
+USER_PROFILE_QUESTION_MARKERS = (
+    "我叫什么",
+    "我叫啥",
+    "我的名字是什么",
+    "名字是什么",
+    "还记得我叫",
+    "还记得我的名字",
+    "怎么称呼我",
+)
 
 
 class LLMClientError(RuntimeError):
@@ -124,6 +145,16 @@ def build_memory_context(memories: list[MemoryContext]) -> str:
     return "\n\n".join(lines)
 
 
+def build_conversation_context(recent_messages: list[ConversationMessage]) -> str:
+    lines = ["以下是最近对话上下文。它只用于理解当前连续对话，不代表长期事实："]
+
+    for message in recent_messages:
+        role = "用户" if message.role == "user" else "Berry"
+        lines.append(f"{role}: {message.content}")
+
+    return "\n".join(lines)
+
+
 def request_chat_completion(
     settings: LLMSettings,
     messages: list[dict[str, str]],
@@ -186,6 +217,7 @@ def generate_persona_reply_with_knowledge(
         user_message,
         knowledge_hits,
         memories=[],
+        recent_messages=[],
     )
 
 
@@ -195,6 +227,7 @@ def generate_persona_reply_with_context(
     user_message: str,
     knowledge_hits: list[RetrievalHit],
     memories: list[MemoryContext],
+    recent_messages: list[ConversationMessage],
 ) -> tuple[str, str]:
     settings = load_settings()
     if not settings.enabled:
@@ -212,6 +245,13 @@ def generate_persona_reply_with_context(
             {
                 "role": "system",
                 "content": build_memory_context(memories),
+            }
+        )
+    if recent_messages:
+        messages.append(
+            {
+                "role": "system",
+                "content": build_conversation_context(recent_messages),
             }
         )
     if knowledge_hits:
@@ -241,9 +281,11 @@ def extract_memory_candidates(user_message: str, assistant_reply: str) -> list[M
             "role": "system",
             "content": (
                 "你是 SoulSync 的长期记忆抽取器。"
-                "只抽取对后续前端协作长期有用的信息，例如项目技术栈、接口约定、用户偏好、前端约定、调试结论。"
+                "只抽取对后续前端协作长期有用的信息，例如用户姓名/称呼、项目技术栈、接口约定、用户偏好、前端约定、调试结论。"
                 "不要抽取寒暄、一次性任务、普通问题、已经明显过期的信息。"
-                "只返回 JSON，格式为 {\"memories\": [{\"type\": \"project_fact|user_preference|frontend_convention|api_convention|debug_note\", "
+                "如果用户明确说“我叫...”“我是...”“以后叫我...”，应抽取为 user_profile。"
+                "不要把助手自己的名字、身份、人设或自我介绍抽取为用户画像。"
+                "只返回 JSON，格式为 {\"memories\": [{\"type\": \"user_profile|project_fact|user_preference|frontend_convention|api_convention|debug_note\", "
                 "\"content\": \"...\", \"reason\": \"...\", \"confidence\": 0.0}]}。没有可保存记忆时返回 {\"memories\": []}。"
             ),
         },
@@ -269,6 +311,29 @@ def extract_memory_candidates(user_message: str, assistant_reply: str) -> list[M
         memories = data.get("memories", [])
         if not isinstance(memories, list):
             raise LLMClientError("memory extractor returned an unexpected response shape")
-        return [MemoryCandidate.model_validate(item) for item in memories]
+        candidates = [MemoryCandidate.model_validate(item) for item in memories]
+        return filter_memory_candidates(user_message, candidates)
     except (json.JSONDecodeError, TypeError, ValueError) as exc:
         raise LLMClientError("memory extractor returned invalid json") from exc
+
+
+def filter_memory_candidates(user_message: str, candidates: list[MemoryCandidate]) -> list[MemoryCandidate]:
+    filtered: list[MemoryCandidate] = []
+    normalized_message = user_message.lower()
+
+    for candidate in candidates:
+        if candidate.type == "user_profile" and not user_message_declares_profile(normalized_message):
+            continue
+        if candidate.type == "user_profile" and re.search(r"\bberry\b|berry", candidate.content, flags=re.IGNORECASE):
+            continue
+        filtered.append(candidate)
+
+    return filtered
+
+
+def user_message_declares_profile(normalized_message: str) -> bool:
+    if "?" in normalized_message or "？" in normalized_message:
+        return False
+    if any(marker in normalized_message for marker in USER_PROFILE_QUESTION_MARKERS):
+        return False
+    return any(re.search(pattern, normalized_message, flags=re.IGNORECASE) for pattern in USER_PROFILE_PATTERNS)
