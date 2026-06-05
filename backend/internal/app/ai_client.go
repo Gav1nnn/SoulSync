@@ -10,14 +10,24 @@ import (
 	"time"
 )
 
+const defaultAIEngineTimeout = 120 * time.Second
+
 type AIClient struct {
 	baseURL    string
 	httpClient *http.Client
 }
 
 func NewAIClient(baseURL string) *AIClient {
+	return NewAIClientWithTimeout(baseURL, defaultAIEngineTimeout)
+}
+
+func NewAIClientWithTimeout(baseURL string, timeout time.Duration) *AIClient {
+	if timeout <= 0 {
+		timeout = defaultAIEngineTimeout
+	}
+
 	return NewAIClientWithHTTPClient(baseURL, &http.Client{
-		Timeout: 10 * time.Second,
+		Timeout: timeout,
 	})
 }
 

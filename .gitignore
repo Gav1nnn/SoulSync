@@ -15,6 +15,7 @@ backend/bin/
 # ai-engine
 .venv/
 ai-engine/.venv/
+ai-engine/.cache/
 __pycache__/
 **/__pycache__/
 *.pyc
@@ -29,5 +30,7 @@ htmlcov/
 ai-engine/.env
 
 # local data
+.data/
+backend/.data/
 *.db
 *.sqlite3

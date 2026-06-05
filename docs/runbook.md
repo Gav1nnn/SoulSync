@@ -49,6 +49,27 @@ cp .env.example .env
 - `LLM_TIMEOUT_SECONDS`
   - 当前默认 `180`
   - 本地 Ollama 首次加载大模型可能较慢，超时后会自动回退到 `mock fallback`
+- 当前 RAG V1 默认检索仓库 `docs/`
+  - 先走 Ollama 的 `qwen3-embedding:0.6b` 检索
+  - 再用关键词结果做补充融合
+  - embedding 模型不可用时会自动回退到关键词检索
+  - 当前不依赖外部向量数据库
+
+先确保本地已经拉好两个 Ollama 模型：
+
+```bash
+ollama pull qwen3.5:4b
+ollama pull qwen3-embedding:0.6b
+```
+
+对应的 `.env` 默认配置是：
+
+```env
+RAG_EMBEDDING_PROVIDER=ollama
+RAG_EMBEDDING_BASE_URL=http://127.0.0.1:11434
+RAG_EMBEDDING_MODEL=qwen3-embedding:0.6b
+RAG_EMBEDDING_TIMEOUT_SECONDS=60
+```
 
 ### 2. 启动 backend
 
@@ -63,11 +84,17 @@ go run .
   - backend 监听端口，默认 `8080`
 - `AI_ENGINE_BASE_URL`
   - ai-engine 地址，默认 `http://localhost:8000`
+- `AI_ENGINE_TIMEOUT_SECONDS`
+  - backend 调 ai-engine 的超时时间，默认 `120`
+  - 本地 Ollama 首次加载模型较慢时，可以临时调大
+- `MEMORY_STORE_PATH`
+  - Memory V1 的本地持久化文件，默认 `.data/memory-store.json`
+  - 保存消息日志、长期记忆和记忆来源信息
 
 示例：
 
 ```bash
-AI_ENGINE_BASE_URL=http://127.0.0.1:8000 go run .
+AI_ENGINE_BASE_URL=http://127.0.0.1:8000 AI_ENGINE_TIMEOUT_SECONDS=180 MEMORY_STORE_PATH=.data/memory-store.json go run .
 ```
 
 ### 3. 启动 frontend
@@ -108,7 +135,14 @@ cd ai-engine
   app/persona/examples.py \
   app/persona/mock.py \
   app/llm/client.py \
-  app/orchestration/generate_reply.py
+  app/orchestration/generate_reply.py \
+  app/retrieval/config.py \
+  app/retrieval/embedder.py \
+  app/retrieval/index_store.py \
+  app/retrieval/schemas.py \
+  app/retrieval/chunker.py \
+  app/retrieval/loader.py \
+  app/retrieval/retriever.py
 ./.venv/bin/python -m unittest discover -s tests -p 'test_*.py'
 ```
 
@@ -135,6 +169,15 @@ curl -X POST http://127.0.0.1:8000/generate \
   -d '{"user_message":"hello"}'
 ```
 
+如果 `docs/` 中命中相关内容，返回里的 `used_knowledge_chunk_ids` 会是非空数组。
+
+常见的 `context_used` 组合：
+
+- `knowledge`, `knowledge.embedding`, `knowledge.keyword`
+  - 表示用了 embedding + 关键词融合检索
+- `knowledge`, `knowledge.keyword`, `knowledge.lexical_fallback`
+  - 表示 embedding 不可用，回退到了关键词检索
+
 ### 后端主链路
 
 ```bash
@@ -142,6 +185,28 @@ curl -X POST http://127.0.0.1:8080/api/chat \
   -H 'Content-Type: application/json' \
   -d '{"message":"hello"}'
 ```
+
+### Memory V1
+
+触发一次包含长期项目信息的对话：
+
+```bash
+curl -X POST http://127.0.0.1:8080/api/chat \
+  -H 'Content-Type: application/json' \
+  -d '{"message":"我们这个项目的前端栈固定用 Vue 3 和 TypeScript，后端接口由 Go Gin 提供。"}'
+```
+
+查看已保存的长期记忆：
+
+```bash
+curl http://127.0.0.1:8080/api/memories
+```
+
+验证点：
+
+- 响应里 `memory_candidate_count` 大于 `0` 时，说明 ai-engine 抽取到了候选记忆
+- 响应里 `memory_written=true` 时，说明 backend 已经保存了高置信长期记忆
+- 下一轮相关问题的 `context_used` 里出现 `memory` 时，说明 backend 已把长期记忆注入 ai-engine
 
 ### 前端联调
 

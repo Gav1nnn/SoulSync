@@ -9,6 +9,8 @@ from urllib import error, request
 from app.persona.examples import berry_few_shot_messages
 from app.persona.profile import PersonaProfile
 from app.persona.prompt_builder import build_persona_instruction
+from app.retrieval.schemas import RetrievalHit
+from app.schemas import MemoryCandidate, MemoryContext
 
 
 CHAT_COMPLETIONS_PATH = "/chat/completions"
@@ -89,23 +91,39 @@ def load_settings() -> LLMSettings:
 
 
 def generate_persona_reply(persona: PersonaProfile, character_name: str, user_message: str) -> tuple[str, str]:
-    settings = load_settings()
-    if not settings.enabled:
-        raise LLMClientError("llm is disabled")
+    return generate_persona_reply_with_knowledge(
+        persona,
+        character_name,
+        user_message,
+        knowledge_hits=[],
+    )
 
+
+def build_knowledge_context(knowledge_hits: list[RetrievalHit]) -> str:
+    lines = ["以下是与当前问题相关的项目资料，请优先基于这些资料回答，并在必要时明确说明资料来源："]
+
+    for index, hit in enumerate(knowledge_hits, start=1):
+        chunk = hit.chunk
+        lines.append(
+            f"[{index}] id={chunk.chunk_id} source={chunk.source_path} section={chunk.section}\n{chunk.content}"
+        )
+
+    return "\n\n".join(lines)
+
+
+def build_memory_context(memories: list[MemoryContext]) -> str:
+    lines = ["以下是长期项目记忆。请把它们当作当前项目和用户偏好的稳定上下文，优先遵守："]
+
+    for index, memory in enumerate(memories, start=1):
+        lines.append(f"[{index}] id={memory.id} type={memory.type}\n{memory.content}")
+
+    return "\n\n".join(lines)
+
+
+def request_chat_completion(settings: LLMSettings, messages: list[dict[str, str]]) -> str:
     payload = {
         "model": settings.model,
-        "messages": [
-            {
-                "role": "system",
-                "content": build_persona_instruction(persona, character_name),
-            },
-            *berry_few_shot_messages(),
-            {
-                "role": "user",
-                "content": user_message,
-            },
-        ],
+        "messages": messages,
         "stream": False,
     }
 
@@ -135,8 +153,100 @@ def generate_persona_reply(persona: PersonaProfile, character_name: str, user_me
 
     try:
         data = json.loads(raw_body.decode("utf-8"))
-        reply = data["choices"][0]["message"]["content"].strip()
+        return data["choices"][0]["message"]["content"].strip()
     except (KeyError, IndexError, TypeError, json.JSONDecodeError) as exc:
         raise LLMClientError("unexpected llm response shape") from exc
 
-    return reply, settings.provider
+
+def generate_persona_reply_with_knowledge(
+    persona: PersonaProfile,
+    character_name: str,
+    user_message: str,
+    knowledge_hits: list[RetrievalHit],
+) -> tuple[str, str]:
+    return generate_persona_reply_with_context(
+        persona,
+        character_name,
+        user_message,
+        knowledge_hits,
+        memories=[],
+    )
+
+
+def generate_persona_reply_with_context(
+    persona: PersonaProfile,
+    character_name: str,
+    user_message: str,
+    knowledge_hits: list[RetrievalHit],
+    memories: list[MemoryContext],
+) -> tuple[str, str]:
+    settings = load_settings()
+    if not settings.enabled:
+        raise LLMClientError("llm is disabled")
+
+    messages: list[dict[str, str]] = [
+        {
+            "role": "system",
+            "content": build_persona_instruction(persona, character_name),
+        },
+        *berry_few_shot_messages(),
+    ]
+    if memories:
+        messages.append(
+            {
+                "role": "system",
+                "content": build_memory_context(memories),
+            }
+        )
+    if knowledge_hits:
+        messages.append(
+            {
+                "role": "system",
+                "content": build_knowledge_context(knowledge_hits),
+            }
+        )
+    messages.append(
+        {
+            "role": "user",
+            "content": user_message,
+        }
+    )
+
+    return request_chat_completion(settings, messages), settings.provider
+
+
+def extract_memory_candidates(user_message: str, assistant_reply: str) -> list[MemoryCandidate]:
+    settings = load_settings()
+    if not settings.enabled:
+        raise LLMClientError("llm is disabled")
+
+    messages = [
+        {
+            "role": "system",
+            "content": (
+                "你是 SoulSync 的长期记忆抽取器。"
+                "只抽取对后续前端协作长期有用的信息，例如项目技术栈、接口约定、用户偏好、前端约定、调试结论。"
+                "不要抽取寒暄、一次性任务、普通问题、已经明显过期的信息。"
+                "只返回 JSON，格式为 {\"memories\": [{\"type\": \"project_fact|user_preference|frontend_convention|api_convention|debug_note\", "
+                "\"content\": \"...\", \"reason\": \"...\", \"confidence\": 0.0}]}。没有可保存记忆时返回 {\"memories\": []}。"
+            ),
+        },
+        {
+            "role": "user",
+            "content": f"用户消息：{user_message}\n\n助手回复：{assistant_reply}",
+        },
+    ]
+
+    try:
+        content = request_chat_completion(settings, messages)
+        raw = content.strip()
+        if raw.startswith("```"):
+            raw = raw.strip("`")
+            raw = raw.removeprefix("json").strip()
+        data = json.loads(raw)
+        memories = data.get("memories", [])
+        if not isinstance(memories, list):
+            raise LLMClientError("memory extractor returned an unexpected response shape")
+        return [MemoryCandidate.model_validate(item) for item in memories]
+    except (json.JSONDecodeError, TypeError, ValueError) as exc:
+        raise LLMClientError("memory extractor returned invalid json") from exc

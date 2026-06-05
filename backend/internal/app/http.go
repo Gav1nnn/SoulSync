@@ -18,6 +18,7 @@ func NewHTTPServer(service *Service) *HTTPServer {
 func (s *HTTPServer) Router() *gin.Engine {
 	router := gin.Default()
 	router.GET("/healthz", s.healthz)
+	router.GET("/api/memories", s.memories)
 	router.POST("/api/chat", s.chat)
 	return router
 }
@@ -58,4 +59,10 @@ func (s *HTTPServer) chat(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, response)
+}
+
+func (s *HTTPServer) memories(c *gin.Context) {
+	c.JSON(http.StatusOK, gin.H{
+		"memories": s.service.Memories(),
+	})
 }
