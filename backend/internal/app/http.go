@@ -25,6 +25,8 @@ func (s *HTTPServer) Router() *gin.Engine {
 	router.GET("/api/traces/:trace_id", s.trace)
 	router.GET("/api/workspaces/current", s.currentWorkspace)
 	router.GET("/api/workspaces/current/summary", s.currentWorkspaceSummary)
+	router.GET("/api/agent/tasks/:id", s.agentTask)
+	router.POST("/api/agent/tasks", s.createAgentTask)
 	router.POST("/api/workspaces", s.connectWorkspace)
 	router.POST("/api/chat", s.chat)
 	return router
@@ -187,5 +189,55 @@ func (s *HTTPServer) currentWorkspaceSummary(c *gin.Context) {
 
 	c.JSON(http.StatusOK, gin.H{
 		"summary": summary,
+	})
+}
+
+func (s *HTTPServer) createAgentTask(c *gin.Context) {
+	var request AgentTaskRequest
+	if err := c.ShouldBindJSON(&request); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "invalid request body",
+		})
+		return
+	}
+
+	task, err := s.service.CreateAgentTask(request.Goal)
+	if err != nil {
+		switch {
+		case errors.Is(err, ErrInvalidAgentTask), errors.Is(err, ErrWorkspaceMissing):
+			c.JSON(http.StatusBadRequest, gin.H{
+				"error": err.Error(),
+			})
+		default:
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"error": "internal server error",
+			})
+		}
+		return
+	}
+
+	c.JSON(http.StatusAccepted, gin.H{
+		"task": task,
+	})
+}
+
+func (s *HTTPServer) agentTask(c *gin.Context) {
+	task, err := s.service.AgentTask(c.Param("id"))
+	if err != nil {
+		if errors.Is(err, ErrAgentTaskMissing) {
+			c.JSON(http.StatusNotFound, gin.H{
+				"error": err.Error(),
+			})
+			return
+		}
+
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": "internal server error",
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"task": task,
 	})
 }

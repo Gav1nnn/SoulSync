@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { onMounted, ref } from "vue";
 import { ChatApiError, fetchRecentMessages, fetchTrace, sendChatMessage } from "../api/chat";
+import AgentTaskPanel from "../components/agent/AgentTaskPanel.vue";
 import ChatHeader from "../components/chat/ChatHeader.vue";
 import MessageComposer from "../components/chat/MessageComposer.vue";
 import MessageList from "../components/chat/MessageList.vue";
@@ -139,6 +140,7 @@ onMounted(() => {
       <div class="workspace">
         <section class="main-column">
           <WorkspaceConnector />
+          <AgentTaskPanel />
 
           <section class="quick-prompts" aria-label="quick prompts">
             <button

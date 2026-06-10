@@ -10,6 +10,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"testing"
+	"time"
 )
 
 func TestChatReturnsReplyAndTraceID(t *testing.T) {
@@ -424,6 +425,71 @@ func TestCurrentWorkspaceSummaryRequiresConnectedWorkspace(t *testing.T) {
 	}
 }
 
+func TestCreateAgentTaskRequiresConnectedWorkspace(t *testing.T) {
+	server := NewHTTPServer(newTestService(t, NewAIClient("http://127.0.0.1:1"))).Router()
+	body := bytes.NewBufferString(`{"goal":"根据用户接口生成页面"}`)
+	request := httptest.NewRequest(http.MethodPost, "/api/agent/tasks", body)
+	request.Header.Set("Content-Type", "application/json")
+	recorder := httptest.NewRecorder()
+
+	server.ServeHTTP(recorder, request)
+
+	if recorder.Code != http.StatusBadRequest {
+		t.Fatalf("expected status 400, got %d", recorder.Code)
+	}
+	if !bytes.Contains(recorder.Body.Bytes(), []byte(ErrWorkspaceMissing.Error())) {
+		t.Fatalf("expected workspace missing error, got %s", recorder.Body.String())
+	}
+}
+
+func TestCreateAgentTaskRunsMockLifecycle(t *testing.T) {
+	server := NewHTTPServer(newTestService(t, NewAIClient("http://127.0.0.1:1"))).Router()
+	workspacePath := newFrontendBackendFixture(t)
+
+	connectBody := bytes.NewBufferString(`{"path":"` + workspacePath + `"}`)
+	connectRequest := httptest.NewRequest(http.MethodPost, "/api/workspaces", connectBody)
+	connectRequest.Header.Set("Content-Type", "application/json")
+	connectRecorder := httptest.NewRecorder()
+	server.ServeHTTP(connectRecorder, connectRequest)
+	if connectRecorder.Code != http.StatusOK {
+		t.Fatalf("expected connect status 200, got %d: %s", connectRecorder.Code, connectRecorder.Body.String())
+	}
+
+	body := bytes.NewBufferString(`{"goal":"根据用户列表接口生成 Vue 页面"}`)
+	request := httptest.NewRequest(http.MethodPost, "/api/agent/tasks", body)
+	request.Header.Set("Content-Type", "application/json")
+	recorder := httptest.NewRecorder()
+	server.ServeHTTP(recorder, request)
+
+	if recorder.Code != http.StatusAccepted {
+		t.Fatalf("expected status 202, got %d: %s", recorder.Code, recorder.Body.String())
+	}
+
+	var response struct {
+		Task AgentTask `json:"task"`
+	}
+	if err := json.Unmarshal(recorder.Body.Bytes(), &response); err != nil {
+		t.Fatalf("decode task response: %v", err)
+	}
+	if response.Task.ID == "" || response.Task.Status != AgentTaskQueued {
+		t.Fatalf("unexpected created task: %#v", response.Task)
+	}
+
+	task := waitForAgentTaskStatus(t, server, response.Task.ID, AgentTaskCompleted)
+	if len(task.Plan) == 0 {
+		t.Fatalf("expected plan to be populated: %#v", task)
+	}
+	if len(task.Logs) < 4 {
+		t.Fatalf("expected lifecycle logs: %#v", task.Logs)
+	}
+	if task.Verification == nil || task.Verification.Status != "skipped" {
+		t.Fatalf("expected skipped verification: %#v", task.Verification)
+	}
+	if len(task.ChangedFiles) != 0 {
+		t.Fatalf("expected no changed files in mock stage: %#v", task.ChangedFiles)
+	}
+}
+
 func TestChatSendsRecentMessagesToAIEngine(t *testing.T) {
 	callCount := 0
 	aiClient := NewAIClientWithHTTPClient("http://ai-engine.local", &http.Client{
@@ -491,7 +557,38 @@ func newTestService(t *testing.T, aiClient *AIClient) *Service {
 		t.Fatalf("create workspace store: %v", err)
 	}
 
-	return NewService(aiClient, traceStore, memoryStore, workspaceStore)
+	return NewService(aiClient, traceStore, memoryStore, workspaceStore, NewAgentTaskStore())
+}
+
+func waitForAgentTaskStatus(t *testing.T, server http.Handler, taskID string, expected AgentTaskStatus) AgentTask {
+	t.Helper()
+
+	deadline := time.Now().Add(2 * time.Second)
+	var lastTask AgentTask
+	for time.Now().Before(deadline) {
+		request := httptest.NewRequest(http.MethodGet, "/api/agent/tasks/"+taskID, nil)
+		recorder := httptest.NewRecorder()
+		server.ServeHTTP(recorder, request)
+		if recorder.Code != http.StatusOK {
+			t.Fatalf("expected status 200, got %d: %s", recorder.Code, recorder.Body.String())
+		}
+
+		var response struct {
+			Task AgentTask `json:"task"`
+		}
+		if err := json.Unmarshal(recorder.Body.Bytes(), &response); err != nil {
+			t.Fatalf("decode task response: %v", err)
+		}
+		lastTask = response.Task
+		if response.Task.Status == expected {
+			return response.Task
+		}
+
+		time.Sleep(10 * time.Millisecond)
+	}
+
+	t.Fatalf("task did not reach %s, last task: %#v", expected, lastTask)
+	return AgentTask{}
 }
 
 func newGitFixture(t *testing.T) string {

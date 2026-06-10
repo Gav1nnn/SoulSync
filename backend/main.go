@@ -58,6 +58,7 @@ func main() {
 		traceStore,
 		memoryStore,
 		workspaceStore,
+		app.NewAgentTaskStore(),
 	)
 	router := app.NewHTTPServer(service).Router()
 

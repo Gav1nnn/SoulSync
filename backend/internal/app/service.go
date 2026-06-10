@@ -15,6 +15,7 @@ type Service struct {
 	traceStore     *TraceStore
 	memoryStore    *MemoryStore
 	workspaceStore *WorkspaceStore
+	agentTaskStore *AgentTaskStore
 }
 
 func NewService(
@@ -22,12 +23,14 @@ func NewService(
 	traceStore *TraceStore,
 	memoryStore *MemoryStore,
 	workspaceStore *WorkspaceStore,
+	agentTaskStore *AgentTaskStore,
 ) *Service {
 	return &Service{
 		aiClient:       aiClient,
 		traceStore:     traceStore,
 		memoryStore:    memoryStore,
 		workspaceStore: workspaceStore,
+		agentTaskStore: agentTaskStore,
 	}
 }
 
@@ -181,6 +184,140 @@ func (s *Service) CurrentWorkspaceSummary() (WorkspaceSummary, bool, error) {
 	}
 
 	return summary, true, nil
+}
+
+func (s *Service) CreateAgentTask(goal string) (AgentTask, error) {
+	trimmedGoal := strings.TrimSpace(goal)
+	if trimmedGoal == "" {
+		return AgentTask{}, fmt.Errorf("%w: goal is required", ErrInvalidAgentTask)
+	}
+
+	workspace, ok, err := s.CurrentWorkspace()
+	if err != nil {
+		return AgentTask{}, err
+	}
+	if !ok {
+		return AgentTask{}, ErrWorkspaceMissing
+	}
+
+	taskWorkspace := workspace
+	task := s.agentTaskStore.Create(trimmedGoal, &taskWorkspace, time.Now())
+	go s.runMockAgentTask(task.ID)
+
+	return task, nil
+}
+
+func (s *Service) AgentTask(id string) (AgentTask, error) {
+	task, ok := s.agentTaskStore.Get(strings.TrimSpace(id))
+	if !ok {
+		return AgentTask{}, ErrAgentTaskMissing
+	}
+
+	return task, nil
+}
+
+func (s *Service) runMockAgentTask(taskID string) {
+	s.transitionAgentTask(taskID, AgentTaskPlanning, "Mock planner is reading workspace summary.")
+
+	task, ok := s.agentTaskStore.Get(taskID)
+	if !ok || task.Workspace == nil {
+		s.failAgentTask(taskID, "workspace missing while planning")
+		return
+	}
+
+	summary, err := buildWorkspaceSummary(task.Workspace.Path)
+	if err != nil {
+		s.failAgentTask(taskID, fmt.Sprintf("workspace summary failed: %v", err))
+		return
+	}
+
+	plan := mockAgentPlan(task.Goal, summary)
+	s.agentTaskStore.Update(taskID, func(task *AgentTask) {
+		task.Plan = plan
+		task.Logs = append(task.Logs, AgentTaskLog{
+			At:      time.Now(),
+			Status:  AgentTaskPlanning,
+			Message: fmt.Sprintf("Mock planner produced %d plan steps.", len(plan)),
+		})
+	})
+
+	s.transitionAgentTask(taskID, AgentTaskRunning, "Mock runner recorded candidate files. No files were changed in this stage.")
+	s.agentTaskStore.Update(taskID, func(task *AgentTask) {
+		task.ChangedFiles = []string{}
+		task.Logs = append(task.Logs, AgentTaskLog{
+			At:      time.Now(),
+			Status:  AgentTaskRunning,
+			Message: "Write execution is disabled until safe execution is implemented.",
+		})
+	})
+
+	s.transitionAgentTask(taskID, AgentTaskVerifying, "Mock verification selected the first discovered validation command.")
+	command := "not detected"
+	if len(summary.ValidationCommands) > 0 {
+		command = summary.ValidationCommands[0]
+	}
+	s.agentTaskStore.Update(taskID, func(task *AgentTask) {
+		task.Verification = &AgentVerification{
+			Status:  "skipped",
+			Command: command,
+			Output:  []string{"Mock verification only. Command execution arrives in the safe execution stage."},
+		}
+	})
+
+	completedAt := time.Now()
+	s.agentTaskStore.Update(taskID, func(task *AgentTask) {
+		task.Status = AgentTaskCompleted
+		task.CompletedAt = &completedAt
+		task.Logs = append(task.Logs, AgentTaskLog{
+			At:      completedAt,
+			Status:  AgentTaskCompleted,
+			Message: "Task completed by mock runtime.",
+		})
+	})
+}
+
+func (s *Service) transitionAgentTask(taskID string, status AgentTaskStatus, message string) {
+	s.agentTaskStore.Update(taskID, func(task *AgentTask) {
+		task.Status = status
+		task.Logs = append(task.Logs, AgentTaskLog{
+			At:      time.Now(),
+			Status:  status,
+			Message: message,
+		})
+	})
+}
+
+func (s *Service) failAgentTask(taskID string, message string) {
+	completedAt := time.Now()
+	s.agentTaskStore.Update(taskID, func(task *AgentTask) {
+		task.Status = AgentTaskFailed
+		task.Error = message
+		task.CompletedAt = &completedAt
+		task.Logs = append(task.Logs, AgentTaskLog{
+			At:      completedAt,
+			Status:  AgentTaskFailed,
+			Message: message,
+		})
+	})
+}
+
+func mockAgentPlan(goal string, summary WorkspaceSummary) []string {
+	steps := []string{
+		"确认用户目标：" + goal,
+		"读取 workspace 摘要，定位前端入口、API client 和后端路由候选。",
+	}
+	if len(summary.BackendRouteCandidates) > 0 {
+		steps = append(steps, "优先查看后端路由候选："+summary.BackendRouteCandidates[0].Path)
+	}
+	if len(summary.FrontendEntryCandidates) > 0 {
+		steps = append(steps, "参考前端入口或页面："+summary.FrontendEntryCandidates[0].Path)
+	}
+	if len(summary.APIClientCandidates) > 0 {
+		steps = append(steps, "复用 API client 候选："+summary.APIClientCandidates[0].Path)
+	}
+	steps = append(steps, "本阶段不写文件，等待安全执行层接入。")
+
+	return steps
 }
 
 func readWorkspace(rawPath string) (Workspace, error) {

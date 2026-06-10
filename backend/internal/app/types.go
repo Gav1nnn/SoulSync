@@ -10,6 +10,10 @@ type WorkspaceRequest struct {
 	Path string `json:"path"`
 }
 
+type AgentTaskRequest struct {
+	Goal string `json:"goal"`
+}
+
 type ChatResponse struct {
 	Reply                string   `json:"reply"`
 	TraceID              string   `json:"trace_id"`
@@ -120,6 +124,44 @@ type WorkspaceCandidate struct {
 	Path   string `json:"path"`
 	Kind   string `json:"kind"`
 	Reason string `json:"reason"`
+}
+
+type AgentTaskStatus string
+
+const (
+	AgentTaskQueued    AgentTaskStatus = "queued"
+	AgentTaskPlanning  AgentTaskStatus = "planning"
+	AgentTaskRunning   AgentTaskStatus = "running"
+	AgentTaskVerifying AgentTaskStatus = "verifying"
+	AgentTaskCompleted AgentTaskStatus = "completed"
+	AgentTaskFailed    AgentTaskStatus = "failed"
+)
+
+type AgentTask struct {
+	ID           string             `json:"id"`
+	Goal         string             `json:"goal"`
+	Status       AgentTaskStatus    `json:"status"`
+	Workspace    *Workspace         `json:"workspace,omitempty"`
+	Plan         []string           `json:"plan"`
+	Logs         []AgentTaskLog     `json:"logs"`
+	ChangedFiles []string           `json:"changed_files"`
+	Verification *AgentVerification `json:"verification,omitempty"`
+	Error        string             `json:"error,omitempty"`
+	CreatedAt    time.Time          `json:"created_at"`
+	UpdatedAt    time.Time          `json:"updated_at"`
+	CompletedAt  *time.Time         `json:"completed_at,omitempty"`
+}
+
+type AgentTaskLog struct {
+	At      time.Time       `json:"at"`
+	Status  AgentTaskStatus `json:"status"`
+	Message string          `json:"message"`
+}
+
+type AgentVerification struct {
+	Status  string   `json:"status"`
+	Command string   `json:"command"`
+	Output  []string `json:"output"`
 }
 
 type Memory struct {
