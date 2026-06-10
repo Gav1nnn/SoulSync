@@ -72,6 +72,40 @@ func (s *AgentTaskStore) Update(id string, update func(*AgentTask)) (AgentTask, 
 	return cloneAgentTask(task), true
 }
 
+func (s *AgentTaskStore) Retry(id string, now time.Time) (AgentTask, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	task, ok := s.tasks[id]
+	if !ok {
+		return AgentTask{}, ErrAgentTaskMissing
+	}
+	if task.Status != AgentTaskFailed {
+		return AgentTask{}, ErrInvalidAgentTask
+	}
+
+	task.Status = AgentTaskQueued
+	task.RetryCount++
+	task.Plan = []string{}
+	task.FilesToRead = []string{}
+	task.InitialAction = nil
+	task.Planner = ""
+	task.PlannerContextUsed = []string{}
+	task.Verification = nil
+	task.Result = nil
+	task.Error = ""
+	task.CompletedAt = nil
+	task.UpdatedAt = now
+	task.Logs = append(task.Logs, AgentTaskLog{
+		At:      now,
+		Status:  AgentTaskQueued,
+		Message: fmt.Sprintf("Retry %d queued on existing branch.", task.RetryCount),
+	})
+
+	s.tasks[id] = task
+	return cloneAgentTask(task), nil
+}
+
 func cloneAgentTask(task AgentTask) AgentTask {
 	task.Plan = append([]string{}, task.Plan...)
 	task.FilesToRead = append([]string{}, task.FilesToRead...)

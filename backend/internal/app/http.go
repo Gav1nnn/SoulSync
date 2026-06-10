@@ -27,6 +27,7 @@ func (s *HTTPServer) Router() *gin.Engine {
 	router.GET("/api/workspaces/current/summary", s.currentWorkspaceSummary)
 	router.GET("/api/agent/tasks/:id", s.agentTask)
 	router.POST("/api/agent/tasks", s.createAgentTask)
+	router.POST("/api/agent/tasks/:id/retry", s.retryAgentTask)
 	router.POST("/api/workspaces", s.connectWorkspace)
 	router.POST("/api/chat", s.chat)
 	router.PATCH("/api/memories/:id", s.updateMemory)
@@ -272,6 +273,31 @@ func (s *HTTPServer) agentTask(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{
+		"task": task,
+	})
+}
+
+func (s *HTTPServer) retryAgentTask(c *gin.Context) {
+	task, err := s.service.RetryAgentTask(c.Param("id"))
+	if err != nil {
+		switch {
+		case errors.Is(err, ErrAgentTaskMissing):
+			c.JSON(http.StatusNotFound, gin.H{
+				"error": err.Error(),
+			})
+		case errors.Is(err, ErrInvalidAgentTask):
+			c.JSON(http.StatusBadRequest, gin.H{
+				"error": err.Error(),
+			})
+		default:
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"error": "internal server error",
+			})
+		}
+		return
+	}
+
+	c.JSON(http.StatusAccepted, gin.H{
 		"task": task,
 	})
 }

@@ -1,11 +1,12 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref } from "vue";
-import { AgentApiError, createAgentTask, fetchAgentTask } from "../../api/agent";
+import { AgentApiError, createAgentTask, fetchAgentTask, retryAgentTask } from "../../api/agent";
 import type { AgentTask, AgentTaskStatus } from "../../types/agent";
 
 const goalDraft = ref("根据用户列表接口生成前端页面");
 const task = ref<AgentTask | null>(null);
 const isSubmitting = ref(false);
+const isRetrying = ref(false);
 const errorMessage = ref("");
 let pollTimer: number | null = null;
 
@@ -43,6 +44,27 @@ async function submitTask() {
       error instanceof AgentApiError ? error.message : "任务创建失败。";
   } finally {
     isSubmitting.value = false;
+  }
+}
+
+async function retryTask() {
+  if (!task.value || task.value.status !== "failed" || isRetrying.value) {
+    return;
+  }
+
+  stopPolling();
+  isRetrying.value = true;
+  errorMessage.value = "";
+
+  try {
+    const response = await retryAgentTask(task.value.id);
+    task.value = response.task;
+    startPolling(response.task.id);
+  } catch (error) {
+    errorMessage.value =
+      error instanceof AgentApiError ? error.message : "任务重试失败。";
+  } finally {
+    isRetrying.value = false;
   }
 }
 
@@ -124,8 +146,18 @@ onBeforeUnmount(() => {
         <code>{{ task.id }}</code>
         <code v-if="task.branch_name">{{ task.branch_name }}</code>
         <span v-if="task.planner">{{ task.planner }}</span>
+        <span v-if="task.retry_count">retry {{ task.retry_count }}</span>
         <span>{{ formatTime(task.updated_at) }}</span>
         <span v-if="isActiveTask">polling</span>
+        <button
+          v-if="task.status === 'failed'"
+          class="retry-button"
+          type="button"
+          :disabled="isRetrying"
+          @click="retryTask"
+        >
+          {{ isRetrying ? "重试中" : "重试" }}
+        </button>
       </div>
 
       <section class="task-section" v-if="task.result">
@@ -382,6 +414,23 @@ h2 {
   color: #294654;
   font-family: "Menlo", "Monaco", "Courier New", monospace;
   overflow-wrap: anywhere;
+}
+
+.retry-button {
+  min-height: 32px;
+  border: 1px solid rgba(179, 61, 55, 0.24);
+  border-radius: 12px;
+  padding: 0 10px;
+  color: #b33d37;
+  background: rgba(255, 236, 232, 0.72);
+  font-size: 0.78rem;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.retry-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.58;
 }
 
 .task-section {

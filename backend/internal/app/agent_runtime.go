@@ -25,6 +25,17 @@ func createAgentTaskBranch(workspaceRoot string, branchName string) error {
 	return nil
 }
 
+func checkoutAgentTaskBranch(workspaceRoot string, branchName string) error {
+	if strings.TrimSpace(branchName) == "" || strings.Contains(branchName, "..") {
+		return fmt.Errorf("invalid branch name")
+	}
+	if _, err := runGit(workspaceRoot, "checkout", branchName); err != nil {
+		return err
+	}
+
+	return nil
+}
+
 func safeWorkspacePath(workspaceRoot string, relPath string) (string, error) {
 	if filepath.IsAbs(relPath) {
 		return "", fmt.Errorf("path must be relative")

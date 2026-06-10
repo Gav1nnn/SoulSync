@@ -221,6 +221,7 @@ type AgentTask struct {
 	ID                 string             `json:"id"`
 	Goal               string             `json:"goal"`
 	Status             AgentTaskStatus    `json:"status"`
+	RetryCount         int                `json:"retry_count"`
 	Workspace          *Workspace         `json:"workspace,omitempty"`
 	BranchName         string             `json:"branch_name,omitempty"`
 	Plan               []string           `json:"plan"`

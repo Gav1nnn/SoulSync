@@ -777,6 +777,99 @@ func TestCreateAgentTaskWritesGeneratedFrontendFiles(t *testing.T) {
 	}
 }
 
+func TestRetryAgentTaskReusesFailedTaskBranch(t *testing.T) {
+	planCalls := 0
+	stepCalls := 0
+	aiClient := NewAIClientWithHTTPClient("http://ai-engine.local", &http.Client{
+		Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
+			switch r.URL.Path {
+			case "/agent/plan":
+				planCalls++
+				return &http.Response{
+					StatusCode: http.StatusOK,
+					Header:     http.Header{"Content-Type": []string{"application/json"}},
+					Body: io.NopCloser(bytes.NewBufferString(
+						`{"plan":["读取用户接口"],"files_to_read":["backend/main.go"],"initial_action":{"type":"read_file","path":"backend/main.go","reason":"先确认接口定义"},"context_used":["persona","workspace.summary","mock_planner"],"used_memory_ids":[],"used_knowledge_chunk_ids":[],"planner":"mock_planner"}`,
+					)),
+				}, nil
+			case "/agent/step":
+				stepCalls++
+				body := `{"summary":"完成","action":{"type":"finish","reason":"retry completed"},"context_used":["persona","workspace.summary","agent.observation","mock_stepper"],"stepper":"mock_stepper"}`
+				if stepCalls == 1 {
+					body = `{"summary":"返回非法动作","action":{"type":"delete_file","path":"frontend/src/views/UserListView.vue","reason":"unsupported"},"context_used":["persona","workspace.summary","agent.observation","mock_stepper"],"stepper":"mock_stepper"}`
+				}
+				return &http.Response{
+					StatusCode: http.StatusOK,
+					Header:     http.Header{"Content-Type": []string{"application/json"}},
+					Body:       io.NopCloser(bytes.NewBufferString(body)),
+				}, nil
+			default:
+				t.Fatalf("unexpected request: %s %s", r.Method, r.URL.Path)
+			}
+			return nil, nil
+		}),
+	})
+	server := NewHTTPServer(newTestService(t, aiClient)).Router()
+	workspacePath := newFrontendBackendFixture(t)
+
+	connectBody := bytes.NewBufferString(`{"path":"` + workspacePath + `"}`)
+	connectRequest := httptest.NewRequest(http.MethodPost, "/api/workspaces", connectBody)
+	connectRequest.Header.Set("Content-Type", "application/json")
+	connectRecorder := httptest.NewRecorder()
+	server.ServeHTTP(connectRecorder, connectRequest)
+	if connectRecorder.Code != http.StatusOK {
+		t.Fatalf("expected connect status 200, got %d: %s", connectRecorder.Code, connectRecorder.Body.String())
+	}
+
+	body := bytes.NewBufferString(`{"goal":"根据用户列表接口生成 Vue 页面"}`)
+	request := httptest.NewRequest(http.MethodPost, "/api/agent/tasks", body)
+	request.Header.Set("Content-Type", "application/json")
+	recorder := httptest.NewRecorder()
+	server.ServeHTTP(recorder, request)
+	if recorder.Code != http.StatusAccepted {
+		t.Fatalf("expected status 202, got %d: %s", recorder.Code, recorder.Body.String())
+	}
+	var response struct {
+		Task AgentTask `json:"task"`
+	}
+	if err := json.Unmarshal(recorder.Body.Bytes(), &response); err != nil {
+		t.Fatalf("decode task response: %v", err)
+	}
+
+	failedTask := waitForAgentTaskStatus(t, server, response.Task.ID, AgentTaskFailed)
+	if failedTask.BranchName == "" {
+		t.Fatalf("expected failed task branch: %#v", failedTask)
+	}
+	if len(failedTask.Steps) != 2 {
+		t.Fatalf("expected failed run steps to be preserved: %#v", failedTask.Steps)
+	}
+
+	retryRequest := httptest.NewRequest(http.MethodPost, "/api/agent/tasks/"+failedTask.ID+"/retry", nil)
+	retryRecorder := httptest.NewRecorder()
+	server.ServeHTTP(retryRecorder, retryRequest)
+	if retryRecorder.Code != http.StatusAccepted {
+		t.Fatalf("expected retry status 202, got %d: %s", retryRecorder.Code, retryRecorder.Body.String())
+	}
+
+	retriedTask := waitForAgentTaskStatus(t, server, failedTask.ID, AgentTaskCompleted)
+	if retriedTask.BranchName != failedTask.BranchName {
+		t.Fatalf("expected retry to reuse branch %q, got %q", failedTask.BranchName, retriedTask.BranchName)
+	}
+	if retriedTask.RetryCount != 1 {
+		t.Fatalf("expected retry count 1: %#v", retriedTask)
+	}
+	if len(retriedTask.Steps) <= len(failedTask.Steps) {
+		t.Fatalf("expected retry to append steps, before=%d after=%d", len(failedTask.Steps), len(retriedTask.Steps))
+	}
+	if planCalls != 2 {
+		t.Fatalf("expected planner to run for original and retry, got %d", planCalls)
+	}
+	currentBranch := strings.TrimSpace(runTestGitOutput(t, workspacePath, "branch", "--show-current"))
+	if currentBranch != failedTask.BranchName {
+		t.Fatalf("expected workspace to remain on task branch %q, got %q", failedTask.BranchName, currentBranch)
+	}
+}
+
 func TestBuildAgentTaskResultExtractsFailureFile(t *testing.T) {
 	task := AgentTask{
 		Status: AgentTaskFailed,

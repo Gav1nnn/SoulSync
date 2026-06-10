@@ -216,6 +216,16 @@ func (s *Service) CreateAgentTask(goal string) (AgentTask, error) {
 	return task, nil
 }
 
+func (s *Service) RetryAgentTask(id string) (AgentTask, error) {
+	task, err := s.agentTaskStore.Retry(strings.TrimSpace(id), time.Now())
+	if err != nil {
+		return AgentTask{}, err
+	}
+
+	go s.runAgentTask(task.ID)
+	return task, nil
+}
+
 func (s *Service) AgentTask(id string) (AgentTask, error) {
 	task, ok := s.agentTaskStore.Get(strings.TrimSpace(id))
 	if !ok {
@@ -272,19 +282,10 @@ func (s *Service) runAgentTask(taskID string) {
 		})
 	})
 
-	branchName := agentTaskBranchName(time.Now())
-	if err := createAgentTaskBranch(task.Workspace.Path, branchName); err != nil {
-		s.failAgentTask(taskID, fmt.Sprintf("create task branch failed: %v", err))
+	if err := s.ensureAgentTaskBranch(taskID, task.Workspace.Path); err != nil {
+		s.failAgentTask(taskID, err.Error())
 		return
 	}
-	s.agentTaskStore.Update(taskID, func(task *AgentTask) {
-		task.BranchName = branchName
-		task.Logs = append(task.Logs, AgentTaskLog{
-			At:      time.Now(),
-			Status:  AgentTaskPlanning,
-			Message: "Created isolated branch: " + branchName,
-		})
-	})
 
 	s.transitionAgentTask(taskID, AgentTaskRunning, "ReAct stepper is executing bounded workspace actions.")
 	if err := s.runAgentSteps(taskID, summary, agentPlan.InitialAction); err != nil {
@@ -348,8 +349,12 @@ func (s *Service) runAgentSteps(taskID string, summary WorkspaceSummary, initial
 		observation := executeAgentAction(task.Workspace.Path, summary.ValidationCommands, normalizedAction)
 		finishedAt := time.Now()
 		summaryText := summarizeAgentObservation(normalizedAction, observation)
+		currentTask, ok := s.agentTaskStore.Get(taskID)
+		if !ok {
+			return fmt.Errorf("task missing while recording step")
+		}
 		step := AgentTaskStep{
-			Index:       stepIndex + 1,
+			Index:       len(currentTask.Steps) + 1,
 			Action:      normalizedAction,
 			Observation: observation,
 			Summary:     summaryText,
@@ -385,7 +390,7 @@ func (s *Service) runAgentSteps(taskID string, summary WorkspaceSummary, initial
 		}
 
 		previousObservation = &observation
-		currentTask, ok := s.agentTaskStore.Get(taskID)
+		currentTask, ok = s.agentTaskStore.Get(taskID)
 		if !ok {
 			return fmt.Errorf("task missing while stepping")
 		}
@@ -421,6 +426,42 @@ func (s *Service) runAgentSteps(taskID string, summary WorkspaceSummary, initial
 	}
 
 	return fmt.Errorf("agent stepper reached max step limit")
+}
+
+func (s *Service) ensureAgentTaskBranch(taskID string, workspacePath string) error {
+	task, ok := s.agentTaskStore.Get(taskID)
+	if !ok {
+		return fmt.Errorf("task missing while preparing branch")
+	}
+
+	if task.BranchName != "" {
+		if err := checkoutAgentTaskBranch(workspacePath, task.BranchName); err != nil {
+			return fmt.Errorf("checkout task branch failed: %v", err)
+		}
+		s.agentTaskStore.Update(taskID, func(task *AgentTask) {
+			task.Logs = append(task.Logs, AgentTaskLog{
+				At:      time.Now(),
+				Status:  AgentTaskPlanning,
+				Message: "Reusing isolated branch: " + task.BranchName,
+			})
+		})
+		return nil
+	}
+
+	branchName := agentTaskBranchName(time.Now())
+	if err := createAgentTaskBranch(workspacePath, branchName); err != nil {
+		return fmt.Errorf("create task branch failed: %v", err)
+	}
+	s.agentTaskStore.Update(taskID, func(task *AgentTask) {
+		task.BranchName = branchName
+		task.Logs = append(task.Logs, AgentTaskLog{
+			At:      time.Now(),
+			Status:  AgentTaskPlanning,
+			Message: "Created isolated branch: " + branchName,
+		})
+	})
+
+	return nil
 }
 
 func (s *Service) transitionAgentTask(taskID string, status AgentTaskStatus, message string) {

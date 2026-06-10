@@ -62,6 +62,7 @@ export type AgentTask = {
   id: string;
   goal: string;
   status: AgentTaskStatus;
+  retry_count: number;
   workspace?: Workspace;
   branch_name?: string;
   plan: string[];
