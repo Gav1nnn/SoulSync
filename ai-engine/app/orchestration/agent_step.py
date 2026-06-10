@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 
 from app.llm.client import LLMClientError, load_settings, request_chat_completion
+from app.orchestration.frontend_codegen import build_generation_summary, next_generated_frontend_action
 from app.persona.prompt_builder import build_persona_instruction
 from app.schemas import AgentPlanAction, AgentStepRequest, AgentStepResponse
 
@@ -55,7 +56,7 @@ def generate_llm_agent_step(request: AgentStepRequest) -> AgentStepResponse:
         settings,
         messages,
         response_format=response_format,
-        max_tokens=1400,
+        max_tokens=2800,
     )
     data = parse_json_object(content)
     data["stepper"] = settings.provider
@@ -87,9 +88,17 @@ def build_fallback_agent_step(request: AgentStepRequest) -> AgentStepResponse:
                 stepper="mock_stepper",
             )
 
+    generated_action = next_generated_frontend_action(request)
+    if generated_action is not None:
+        return AgentStepResponse(
+            summary=build_generation_summary(request),
+            action=generated_action,
+            stepper="mock_stepper",
+        )
+
     return AgentStepResponse(
         summary=build_finish_summary(request),
-        action=AgentPlanAction(type="finish", reason="当前阶段完成只读项目理解，等待后续接口识别和生成阶段。"),
+        action=AgentPlanAction(type="finish", reason="当前阶段已完成接口到页面生成。"),
         stepper="mock_stepper",
     )
 

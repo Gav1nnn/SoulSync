@@ -577,6 +577,102 @@ func TestCreateAgentTaskRunsPlannerLifecycle(t *testing.T) {
 	}
 }
 
+func TestCreateAgentTaskWritesGeneratedFrontendFiles(t *testing.T) {
+	stepCalls := 0
+	aiClient := NewAIClientWithHTTPClient("http://ai-engine.local", &http.Client{
+		Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
+			if r.Method != http.MethodPost {
+				t.Fatalf("unexpected request: %s %s", r.Method, r.URL.Path)
+			}
+
+			switch r.URL.Path {
+			case "/agent/plan":
+				return &http.Response{
+					StatusCode: http.StatusOK,
+					Header:     http.Header{"Content-Type": []string{"application/json"}},
+					Body: io.NopCloser(bytes.NewBufferString(
+						`{"plan":["读取用户接口","生成前端类型","生成 API client","生成 Vue 页面"],"files_to_read":["backend/main.go"],"initial_action":{"type":"read_file","path":"backend/main.go","reason":"先确认接口定义"},"context_used":["persona","workspace.summary","mock_planner"],"used_memory_ids":[],"used_knowledge_chunk_ids":[],"planner":"mock_planner"}`,
+					)),
+				}, nil
+			case "/agent/step":
+				stepCalls++
+				var request AIAgentStepRequest
+				if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+					t.Fatalf("decode step request: %v", err)
+				}
+				if len(request.WorkspaceSummary.APICandidates) == 0 {
+					t.Fatalf("expected API candidates in step request: %#v", request.WorkspaceSummary)
+				}
+				responses := []string{
+					`{"summary":"写类型","action":{"type":"write_file","path":"frontend/src/types/soulsyncUser.ts","content":"export type SoulSyncUser = {\n  id: string | number;\n  name?: string;\n};\n","reason":"写类型"},"context_used":["persona","workspace.summary","agent.observation","mock_stepper"],"stepper":"mock_stepper"}`,
+					`{"summary":"写 API client","action":{"type":"write_file","path":"frontend/src/api/soulsyncUser.ts","content":"import type { SoulSyncUser } from '../types/soulsyncUser';\n\nexport async function fetchSoulSyncUserList(): Promise<SoulSyncUser[]> {\n  return [];\n}\n","reason":"写 API client"},"context_used":["persona","workspace.summary","agent.observation","mock_stepper"],"stepper":"mock_stepper"}`,
+					`{"summary":"写 Vue 页面","action":{"type":"write_file","path":"frontend/src/views/SoulSyncUserView.vue","content":"<template><main>User list</main></template>\n","reason":"写 Vue 页面"},"context_used":["persona","workspace.summary","agent.observation","mock_stepper"],"stepper":"mock_stepper"}`,
+					`{"summary":"完成","action":{"type":"finish","reason":"接口到页面生成完成"},"context_used":["persona","workspace.summary","agent.observation","mock_stepper"],"stepper":"mock_stepper"}`,
+				}
+				if stepCalls > len(responses) {
+					t.Fatalf("unexpected step call %d", stepCalls)
+				}
+				return &http.Response{
+					StatusCode: http.StatusOK,
+					Header:     http.Header{"Content-Type": []string{"application/json"}},
+					Body:       io.NopCloser(bytes.NewBufferString(responses[stepCalls-1])),
+				}, nil
+			default:
+				t.Fatalf("unexpected request: %s %s", r.Method, r.URL.Path)
+			}
+			return nil, nil
+		}),
+	})
+	server := NewHTTPServer(newTestService(t, aiClient)).Router()
+	workspacePath := newFrontendBackendFixture(t)
+
+	connectBody := bytes.NewBufferString(`{"path":"` + workspacePath + `"}`)
+	connectRequest := httptest.NewRequest(http.MethodPost, "/api/workspaces", connectBody)
+	connectRequest.Header.Set("Content-Type", "application/json")
+	connectRecorder := httptest.NewRecorder()
+	server.ServeHTTP(connectRecorder, connectRequest)
+	if connectRecorder.Code != http.StatusOK {
+		t.Fatalf("expected connect status 200, got %d: %s", connectRecorder.Code, connectRecorder.Body.String())
+	}
+
+	body := bytes.NewBufferString(`{"goal":"根据用户列表接口生成 Vue 页面"}`)
+	request := httptest.NewRequest(http.MethodPost, "/api/agent/tasks", body)
+	request.Header.Set("Content-Type", "application/json")
+	recorder := httptest.NewRecorder()
+	server.ServeHTTP(recorder, request)
+	if recorder.Code != http.StatusAccepted {
+		t.Fatalf("expected status 202, got %d: %s", recorder.Code, recorder.Body.String())
+	}
+
+	var response struct {
+		Task AgentTask `json:"task"`
+	}
+	if err := json.Unmarshal(recorder.Body.Bytes(), &response); err != nil {
+		t.Fatalf("decode task response: %v", err)
+	}
+
+	task := waitForAgentTaskStatus(t, server, response.Task.ID, AgentTaskCompleted)
+	expectedFiles := []string{
+		"frontend/src/types/soulsyncUser.ts",
+		"frontend/src/api/soulsyncUser.ts",
+		"frontend/src/views/SoulSyncUserView.vue",
+	}
+	for _, expectedFile := range expectedFiles {
+		if !containsString(task.ChangedFiles, expectedFile) {
+			t.Fatalf("expected changed file %s: %#v", expectedFile, task.ChangedFiles)
+		}
+		if _, err := os.Stat(filepath.Join(workspacePath, filepath.FromSlash(expectedFile))); err != nil {
+			t.Fatalf("expected generated file %s to exist: %v", expectedFile, err)
+		}
+	}
+	if task.Verification == nil || task.Verification.Status != "passed" {
+		t.Fatalf("expected verification to pass: %#v", task.Verification)
+	}
+	if stepCalls != 4 {
+		t.Fatalf("expected four stepper calls, got %d", stepCalls)
+	}
+}
+
 func TestSafeWorkspacePathRejectsEscapes(t *testing.T) {
 	root := t.TempDir()
 

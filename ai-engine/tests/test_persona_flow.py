@@ -85,7 +85,7 @@ class PersonaFlowTests(unittest.TestCase):
         self.assertIn("frontend/src/api/users.ts", response.files_to_read)
 
     @patch("app.orchestration.agent_step.generate_llm_agent_step")
-    def test_agent_step_fallback_reads_next_candidate_then_finishes(
+    def test_agent_step_fallback_reads_then_generates_frontend_files(
         self,
         mock_generate_llm_agent_step,
     ) -> None:
@@ -127,7 +127,7 @@ class PersonaFlowTests(unittest.TestCase):
         self.assertEqual(response.action.type, "read_file")
         self.assertEqual(response.action.path, "frontend/src/api/users.ts")
 
-        finish_response = generate_agent_step(
+        type_response = generate_agent_step(
             AgentStepRequest(
                 goal="根据用户列表接口生成页面",
                 plan=["读取接口", "读取 API client"],
@@ -146,8 +146,80 @@ class PersonaFlowTests(unittest.TestCase):
             )
         )
 
+        self.assertEqual(type_response.action.type, "write_file")
+        self.assertEqual(type_response.action.path, "frontend/src/types/soulsyncUser.ts")
+        self.assertIn("export type SoulSyncUser", type_response.action.content or "")
+
+        client_response = generate_agent_step(
+            AgentStepRequest(
+                goal="根据用户列表接口生成页面",
+                plan=["读取接口", "读取 API client"],
+                workspace_summary=workspace_summary,
+                step_index=4,
+                previous_observation=AgentObservation(
+                    status="ok",
+                    message="Wrote 120 bytes.",
+                    path="frontend/src/types/soulsyncUser.ts",
+                ),
+                read_files=[
+                    AgentReadFile(path="backend/main.go", content="router.GET('/users', listUsers)"),
+                    AgentReadFile(path="frontend/src/api/users.ts", content="export function listUsers() {}"),
+                ],
+                changed_files=["frontend/src/types/soulsyncUser.ts"],
+            )
+        )
+
+        self.assertEqual(client_response.action.type, "write_file")
+        self.assertEqual(client_response.action.path, "frontend/src/api/soulsyncUser.ts")
+        self.assertIn('fetch("/api/users")', client_response.action.content or "")
+
+        view_response = generate_agent_step(
+            AgentStepRequest(
+                goal="根据用户列表接口生成页面",
+                plan=["读取接口", "读取 API client"],
+                workspace_summary=workspace_summary,
+                step_index=5,
+                previous_observation=AgentObservation(
+                    status="ok",
+                    message="Wrote 180 bytes.",
+                    path="frontend/src/api/soulsyncUser.ts",
+                ),
+                read_files=[
+                    AgentReadFile(path="backend/main.go", content="router.GET('/users', listUsers)"),
+                    AgentReadFile(path="frontend/src/api/users.ts", content="export function listUsers() {}"),
+                ],
+                changed_files=[
+                    "frontend/src/types/soulsyncUser.ts",
+                    "frontend/src/api/soulsyncUser.ts",
+                ],
+            )
+        )
+
+        self.assertEqual(view_response.action.type, "write_file")
+        self.assertEqual(view_response.action.path, "frontend/src/views/SoulSyncUserView.vue")
+        self.assertIn("Loading...", view_response.action.content or "")
+
+        finish_response = generate_agent_step(
+            AgentStepRequest(
+                goal="根据用户列表接口生成页面",
+                plan=["读取接口", "读取 API client"],
+                workspace_summary=workspace_summary,
+                step_index=6,
+                previous_observation=AgentObservation(
+                    status="ok",
+                    message="Wrote 900 bytes.",
+                    path="frontend/src/views/SoulSyncUserView.vue",
+                ),
+                changed_files=[
+                    "frontend/src/types/soulsyncUser.ts",
+                    "frontend/src/api/soulsyncUser.ts",
+                    "frontend/src/views/SoulSyncUserView.vue",
+                ],
+            )
+        )
+
         self.assertEqual(finish_response.action.type, "finish")
-        self.assertIn("读取 2 个文件", finish_response.summary)
+        self.assertIn("改动 3 个文件", finish_response.summary)
 
     def test_prompt_builder_contains_core_persona_fields(self) -> None:
         persona = default_berry_persona()
