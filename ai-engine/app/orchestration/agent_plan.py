@@ -151,6 +151,7 @@ def build_workspace_context(request: AgentPlanRequest) -> str:
         f"Frontend frameworks: {', '.join(summary.frontend_frameworks) or 'none'}",
         f"Backend frameworks: {', '.join(summary.backend_frameworks) or 'none'}",
         "Backend route candidates:\n" + candidate_lines(summary.backend_route_candidates),
+        "API candidates:\n" + api_candidate_lines(summary.api_candidates),
         "API client candidates:\n" + candidate_lines(summary.api_client_candidates),
         "Frontend entry candidates:\n" + candidate_lines(summary.frontend_entry_candidates),
         "Type file candidates:\n" + candidate_lines(summary.type_file_candidates),
@@ -165,6 +166,19 @@ def candidate_lines(candidates) -> str:
     if not candidates:
         return "- none"
     return "\n".join(f"- {candidate.path} ({candidate.kind}): {candidate.reason}" for candidate in candidates[:8])
+
+
+def api_candidate_lines(candidates) -> str:
+    if not candidates:
+        return "- none"
+    lines = []
+    for candidate in candidates[:8]:
+        type_paths = ", ".join(item.path for item in candidate.type_definitions[:4]) or "none"
+        lines.append(
+            f"- {candidate.method} {candidate.path} handler={candidate.handler} "
+            f"file={candidate.handler_file} types={type_paths}"
+        )
+    return "\n".join(lines)
 
 
 def parse_json_object(content: str) -> dict:

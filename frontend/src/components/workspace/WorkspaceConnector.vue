@@ -207,6 +207,18 @@ onMounted(() => {
           </section>
 
           <section class="summary-section">
+            <p class="section-title">API</p>
+            <ul class="compact-list">
+              <li v-for="item in summary.api_candidates.slice(0, 5)" :key="`${item.method}-${item.path}-${item.handler}`">
+                <span>{{ item.method }}</span>
+                <code>{{ item.path }}</code>
+                <small>{{ item.handler || "inline" }} · {{ item.handler_file }}</small>
+              </li>
+              <li v-if="!summary.api_candidates.length" class="muted-row">none</li>
+            </ul>
+          </section>
+
+          <section class="summary-section">
             <p class="section-title">Frontend</p>
             <ul class="compact-list">
               <li v-for="item in limitedCandidates(summary.frontend_entry_candidates)" :key="item.path">

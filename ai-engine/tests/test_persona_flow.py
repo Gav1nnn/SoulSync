@@ -19,6 +19,7 @@ from app.schemas import (
     AgentStepRequest,
     AgentObservation,
     AgentReadFile,
+    APICandidate,
     GenerateRequest,
     MemoryCandidate,
     MemoryContext,
@@ -52,6 +53,9 @@ class PersonaFlowTests(unittest.TestCase):
                 root_name="project",
                 backend_route_candidates=[
                     WorkspaceCandidate(path="backend/main.go", kind="go.gin.routes", reason="route")
+                ],
+                api_candidates=[
+                    APICandidate(method="GET", path="/api/users", handler="listUsers", handler_file="backend/main.go")
                 ],
                 api_client_candidates=[
                     WorkspaceCandidate(path="frontend/src/api/users.ts", kind="frontend.api_client", reason="api")
@@ -91,6 +95,9 @@ class PersonaFlowTests(unittest.TestCase):
             root_name="project",
             backend_route_candidates=[
                 WorkspaceCandidate(path="backend/main.go", kind="go.gin.routes", reason="route")
+            ],
+            api_candidates=[
+                APICandidate(method="GET", path="/api/users", handler="listUsers", handler_file="backend/main.go")
             ],
             api_client_candidates=[
                 WorkspaceCandidate(path="frontend/src/api/users.ts", kind="frontend.api_client", reason="api")

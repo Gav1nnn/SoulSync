@@ -20,6 +20,15 @@ export type WorkspaceCandidate = {
   reason: string;
 };
 
+export type ApiCandidate = {
+  method: string;
+  path: string;
+  handler: string;
+  handler_file: string;
+  type_definitions: WorkspaceCandidate[];
+  reason: string;
+};
+
 export type WorkspaceSummary = {
   workspace_path: string;
   root_name: string;
@@ -28,6 +37,7 @@ export type WorkspaceSummary = {
   frontend_frameworks: string[];
   backend_frameworks: string[];
   backend_route_candidates: WorkspaceCandidate[];
+  api_candidates: ApiCandidate[];
   type_file_candidates: WorkspaceCandidate[];
   frontend_entry_candidates: WorkspaceCandidate[];
   api_client_candidates: WorkspaceCandidate[];

@@ -101,6 +101,7 @@ def build_step_context(request: AgentStepRequest) -> str:
         f"Goal: {request.goal}",
         "Plan:\n" + "\n".join(f"- {item}" for item in request.plan[:8]),
         f"Workspace: {summary.root_name} ({summary.workspace_path})",
+        "API candidates:\n" + api_candidate_lines(summary.api_candidates),
         "Validation commands:\n" + "\n".join(f"- {command}" for command in summary.validation_commands[:8]),
         "Previous observation:\n" + observation_context(request),
         "Read files:\n" + read_files_context(request),
@@ -145,6 +146,19 @@ def recent_steps_context(request: AgentStepRequest) -> str:
         f"- #{step.index} {step.action.type}: {step.observation.status} {step.observation.message}"
         for step in request.recent_steps[-4:]
     )
+
+
+def api_candidate_lines(candidates) -> str:
+    if not candidates:
+        return "- none"
+    lines = []
+    for candidate in candidates[:8]:
+        type_paths = ", ".join(item.path for item in candidate.type_definitions[:4]) or "none"
+        lines.append(
+            f"- {candidate.method} {candidate.path} handler={candidate.handler} "
+            f"file={candidate.handler_file} types={type_paths}"
+        )
+    return "\n".join(lines)
 
 
 def next_unread_file(request: AgentStepRequest) -> str:

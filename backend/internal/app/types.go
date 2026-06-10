@@ -174,6 +174,7 @@ type WorkspaceSummary struct {
 	FrontendFrameworks      []string             `json:"frontend_frameworks"`
 	BackendFrameworks       []string             `json:"backend_frameworks"`
 	BackendRouteCandidates  []WorkspaceCandidate `json:"backend_route_candidates"`
+	APICandidates           []APICandidate       `json:"api_candidates"`
 	TypeFileCandidates      []WorkspaceCandidate `json:"type_file_candidates"`
 	FrontendEntryCandidates []WorkspaceCandidate `json:"frontend_entry_candidates"`
 	APIClientCandidates     []WorkspaceCandidate `json:"api_client_candidates"`
@@ -190,6 +191,15 @@ type WorkspaceCandidate struct {
 	Path   string `json:"path"`
 	Kind   string `json:"kind"`
 	Reason string `json:"reason"`
+}
+
+type APICandidate struct {
+	Method          string               `json:"method"`
+	Path            string               `json:"path"`
+	Handler         string               `json:"handler"`
+	HandlerFile     string               `json:"handler_file"`
+	TypeDefinitions []WorkspaceCandidate `json:"type_definitions"`
+	Reason          string               `json:"reason"`
 }
 
 type AgentTaskStatus string

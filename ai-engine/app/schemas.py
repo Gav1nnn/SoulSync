@@ -52,6 +52,15 @@ class WorkspaceCandidate(BaseModel):
     reason: str = ""
 
 
+class APICandidate(BaseModel):
+    method: str
+    path: str
+    handler: str = ""
+    handler_file: str = ""
+    type_definitions: list[WorkspaceCandidate] = Field(default_factory=list)
+    reason: str = ""
+
+
 class WorkspaceSummary(BaseModel):
     workspace_path: str = ""
     root_name: str = ""
@@ -60,6 +69,7 @@ class WorkspaceSummary(BaseModel):
     frontend_frameworks: list[str] = Field(default_factory=list)
     backend_frameworks: list[str] = Field(default_factory=list)
     backend_route_candidates: list[WorkspaceCandidate] = Field(default_factory=list)
+    api_candidates: list[APICandidate] = Field(default_factory=list)
     type_file_candidates: list[WorkspaceCandidate] = Field(default_factory=list)
     frontend_entry_candidates: list[WorkspaceCandidate] = Field(default_factory=list)
     api_client_candidates: list[WorkspaceCandidate] = Field(default_factory=list)

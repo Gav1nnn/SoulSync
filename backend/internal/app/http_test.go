@@ -394,6 +394,16 @@ func TestCurrentWorkspaceSummaryScansProjectCandidates(t *testing.T) {
 	if !containsCandidate(response.Summary.BackendRouteCandidates, "backend/main.go") {
 		t.Fatalf("expected backend route candidate: %#v", response.Summary.BackendRouteCandidates)
 	}
+	userAPI, ok := findAPICandidate(response.Summary.APICandidates, "GET", "/api/users")
+	if !ok {
+		t.Fatalf("expected users API candidate: %#v", response.Summary.APICandidates)
+	}
+	if userAPI.Handler != "listUsers" || userAPI.HandlerFile != "backend/main.go" {
+		t.Fatalf("expected handler metadata on API candidate: %#v", userAPI)
+	}
+	if !containsCandidate(userAPI.TypeDefinitions, "backend/main.go") {
+		t.Fatalf("expected type definition metadata on API candidate: %#v", userAPI.TypeDefinitions)
+	}
 	if !containsCandidate(response.Summary.TypeFileCandidates, "frontend/src/types/user.ts") {
 		t.Fatalf("expected type file candidate: %#v", response.Summary.TypeFileCandidates)
 	}
@@ -715,9 +725,19 @@ func newFrontendBackendFixture(t *testing.T) string {
 
 import "github.com/gin-gonic/gin"
 
+type UserResponse struct {
+	ID string
+	Name string
+}
+
 func main() {
 	router := gin.Default()
-	router.GET("/api/users", func(c *gin.Context) {})
+	api := router.Group("/api")
+	api.GET("/users", listUsers)
+}
+
+func listUsers(c *gin.Context) {
+	c.JSON(200, []UserResponse{})
 }`)
 
 	runTestGit(t, dir, "add", ".")
@@ -754,6 +774,15 @@ func containsCandidate(candidates []WorkspaceCandidate, expectedPath string) boo
 		}
 	}
 	return false
+}
+
+func findAPICandidate(candidates []APICandidate, method string, path string) (APICandidate, bool) {
+	for _, candidate := range candidates {
+		if candidate.Method == method && candidate.Path == path {
+			return candidate, true
+		}
+	}
+	return APICandidate{}, false
 }
 
 func runTestGit(t *testing.T, dir string, args ...string) {
