@@ -14,6 +14,10 @@ type AgentTaskRequest struct {
 	Goal string `json:"goal"`
 }
 
+type MemoryUpdateRequest struct {
+	Status string `json:"status"`
+}
+
 type ChatResponse struct {
 	Reply                string   `json:"reply"`
 	TraceID              string   `json:"trace_id"`

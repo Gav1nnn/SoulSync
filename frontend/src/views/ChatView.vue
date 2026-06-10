@@ -6,6 +6,7 @@ import ChatHeader from "../components/chat/ChatHeader.vue";
 import MessageComposer from "../components/chat/MessageComposer.vue";
 import MessageList from "../components/chat/MessageList.vue";
 import StatusPanel from "../components/chat/StatusPanel.vue";
+import MemoryPanel from "../components/memory/MemoryPanel.vue";
 import WorkspaceConnector from "../components/workspace/WorkspaceConnector.vue";
 import type { ChatErrorCode, ChatMessage, ChatStatus, Trace } from "../types/chat";
 
@@ -141,6 +142,7 @@ onMounted(() => {
         <section class="main-column">
           <WorkspaceConnector />
           <AgentTaskPanel />
+          <MemoryPanel />
 
           <section class="quick-prompts" aria-label="quick prompts">
             <button

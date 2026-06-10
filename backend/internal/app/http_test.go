@@ -156,6 +156,101 @@ func TestMemoriesEndpointReturnsSavedMemories(t *testing.T) {
 	}
 }
 
+func TestMemoryStatusEndpointDisablesMemoryContext(t *testing.T) {
+	callCount := 0
+	var memoryID string
+	aiClient := NewAIClientWithHTTPClient("http://ai-engine.local", &http.Client{
+		Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
+			callCount++
+			var request AIGenerateRequest
+			if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+				t.Fatalf("decode ai request: %v", err)
+			}
+			if callCount == 2 && len(request.Memories) != 0 {
+				t.Fatalf("expected disabled memory to be excluded from AI request: %#v", request.Memories)
+			}
+			if callCount == 3 && len(request.Memories) != 1 {
+				t.Fatalf("expected reenabled memory to be injected: %#v", request.Memories)
+			}
+
+			candidatesJSON := `[]`
+			if callCount == 1 {
+				candidatesJSON = `[{"type":"project_fact","content":"项目使用 Vue 3。","reason":"用户明确说明技术栈。","confidence":0.9}]`
+			}
+			return &http.Response{
+				StatusCode: http.StatusOK,
+				Header:     http.Header{"Content-Type": []string{"application/json"}},
+				Body: io.NopCloser(bytes.NewBufferString(
+					`{"reply":"Berry reply","persona":"Berry","context_used":["persona"],"used_persona":true,"used_memory_ids":[],"used_knowledge_chunk_ids":[],"memory_written":false,"memory_candidates":` + candidatesJSON + `}`,
+				)),
+			}, nil
+		}),
+	})
+	server := NewHTTPServer(newTestService(t, aiClient)).Router()
+
+	chatBody := bytes.NewBufferString(`{"message":"我们项目使用 Vue 3"}`)
+	chatRequest := httptest.NewRequest(http.MethodPost, "/api/chat", chatBody)
+	chatRequest.Header.Set("Content-Type", "application/json")
+	chatRecorder := httptest.NewRecorder()
+	server.ServeHTTP(chatRecorder, chatRequest)
+	if chatRecorder.Code != http.StatusOK {
+		t.Fatalf("expected chat status 200, got %d", chatRecorder.Code)
+	}
+
+	listRequest := httptest.NewRequest(http.MethodGet, "/api/memories", nil)
+	listRecorder := httptest.NewRecorder()
+	server.ServeHTTP(listRecorder, listRequest)
+	var listResponse struct {
+		Memories []Memory `json:"memories"`
+	}
+	if err := json.Unmarshal(listRecorder.Body.Bytes(), &listResponse); err != nil {
+		t.Fatalf("decode memories response: %v", err)
+	}
+	if len(listResponse.Memories) != 1 {
+		t.Fatalf("expected one memory: %#v", listResponse.Memories)
+	}
+	memoryID = listResponse.Memories[0].ID
+
+	disableBody := bytes.NewBufferString(`{"status":"disabled"}`)
+	disableRequest := httptest.NewRequest(http.MethodPatch, "/api/memories/"+memoryID, disableBody)
+	disableRequest.Header.Set("Content-Type", "application/json")
+	disableRecorder := httptest.NewRecorder()
+	server.ServeHTTP(disableRecorder, disableRequest)
+	if disableRecorder.Code != http.StatusOK {
+		t.Fatalf("expected disable status 200, got %d: %s", disableRecorder.Code, disableRecorder.Body.String())
+	}
+	if !bytes.Contains(disableRecorder.Body.Bytes(), []byte(`"status":"disabled"`)) {
+		t.Fatalf("expected disabled memory response: %s", disableRecorder.Body.String())
+	}
+
+	secondChatBody := bytes.NewBufferString(`{"message":"Vue 相关约定是什么"}`)
+	secondChatRequest := httptest.NewRequest(http.MethodPost, "/api/chat", secondChatBody)
+	secondChatRequest.Header.Set("Content-Type", "application/json")
+	secondChatRecorder := httptest.NewRecorder()
+	server.ServeHTTP(secondChatRecorder, secondChatRequest)
+	if secondChatRecorder.Code != http.StatusOK {
+		t.Fatalf("expected second chat status 200, got %d", secondChatRecorder.Code)
+	}
+
+	enableBody := bytes.NewBufferString(`{"status":"active"}`)
+	enableRequest := httptest.NewRequest(http.MethodPatch, "/api/memories/"+memoryID, enableBody)
+	enableRequest.Header.Set("Content-Type", "application/json")
+	enableRecorder := httptest.NewRecorder()
+	server.ServeHTTP(enableRecorder, enableRequest)
+	if enableRecorder.Code != http.StatusOK {
+		t.Fatalf("expected enable status 200, got %d: %s", enableRecorder.Code, enableRecorder.Body.String())
+	}
+
+	thirdChatBody := bytes.NewBufferString(`{"message":"Vue 相关约定是什么"}`)
+	thirdChatRequest := httptest.NewRequest(http.MethodPost, "/api/chat", thirdChatBody)
+	thirdChatRequest.Header.Set("Content-Type", "application/json")
+	thirdChatRecorder := httptest.NewRecorder()
+	server.ServeHTTP(thirdChatRecorder, thirdChatRequest)
+	if thirdChatRecorder.Code != http.StatusOK {
+		t.Fatalf("expected third chat status 200, got %d", thirdChatRecorder.Code)
+	}
+}
+
 func TestTraceEndpointReturnsCompleteTrace(t *testing.T) {
 	aiClient := NewAIClientWithHTTPClient("http://ai-engine.local", &http.Client{
 		Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {

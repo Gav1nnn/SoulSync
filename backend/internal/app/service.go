@@ -123,7 +123,16 @@ func (s *Service) Chat(ctx context.Context, message string) (ChatResponse, error
 }
 
 func (s *Service) Memories() []Memory {
-	return s.memoryStore.ListMemories()
+	return s.memoryStore.ListAllMemories()
+}
+
+func (s *Service) UpdateMemoryStatus(id string, status string) (Memory, error) {
+	memory, err := s.memoryStore.UpdateMemoryStatus(id, status, time.Now())
+	if err != nil {
+		return Memory{}, err
+	}
+
+	return memory, nil
 }
 
 func (s *Service) RecentMessages(limit int) []Message {

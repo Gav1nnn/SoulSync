@@ -29,6 +29,7 @@ func (s *HTTPServer) Router() *gin.Engine {
 	router.POST("/api/agent/tasks", s.createAgentTask)
 	router.POST("/api/workspaces", s.connectWorkspace)
 	router.POST("/api/chat", s.chat)
+	router.PATCH("/api/memories/:id", s.updateMemory)
 	return router
 }
 
@@ -73,6 +74,39 @@ func (s *HTTPServer) chat(c *gin.Context) {
 func (s *HTTPServer) memories(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"memories": s.service.Memories(),
+	})
+}
+
+func (s *HTTPServer) updateMemory(c *gin.Context) {
+	var request MemoryUpdateRequest
+	if err := c.ShouldBindJSON(&request); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "invalid request body",
+		})
+		return
+	}
+
+	memory, err := s.service.UpdateMemoryStatus(c.Param("id"), request.Status)
+	if err != nil {
+		switch {
+		case errors.Is(err, ErrInvalidMemory):
+			c.JSON(http.StatusBadRequest, gin.H{
+				"error": err.Error(),
+			})
+		case errors.Is(err, ErrMemoryMissing):
+			c.JSON(http.StatusNotFound, gin.H{
+				"error": err.Error(),
+			})
+		default:
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"error": "internal server error",
+			})
+		}
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"memory": memory,
 	})
 }
 
