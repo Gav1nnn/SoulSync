@@ -96,6 +96,32 @@ type Workspace struct {
 	UpdatedAt time.Time `json:"updated_at"`
 }
 
+type WorkspaceSummary struct {
+	WorkspacePath           string               `json:"workspace_path"`
+	RootName                string               `json:"root_name"`
+	Tree                    []WorkspaceTreeItem  `json:"tree"`
+	PackageManagers         []string             `json:"package_managers"`
+	FrontendFrameworks      []string             `json:"frontend_frameworks"`
+	BackendFrameworks       []string             `json:"backend_frameworks"`
+	BackendRouteCandidates  []WorkspaceCandidate `json:"backend_route_candidates"`
+	TypeFileCandidates      []WorkspaceCandidate `json:"type_file_candidates"`
+	FrontendEntryCandidates []WorkspaceCandidate `json:"frontend_entry_candidates"`
+	APIClientCandidates     []WorkspaceCandidate `json:"api_client_candidates"`
+	ValidationCommands      []string             `json:"validation_commands"`
+	GeneratedAt             time.Time            `json:"generated_at"`
+}
+
+type WorkspaceTreeItem struct {
+	Path string `json:"path"`
+	Type string `json:"type"`
+}
+
+type WorkspaceCandidate struct {
+	Path   string `json:"path"`
+	Kind   string `json:"kind"`
+	Reason string `json:"reason"`
+}
+
 type Memory struct {
 	ID              string    `json:"id"`
 	Type            string    `json:"type"`

@@ -24,6 +24,7 @@ func (s *HTTPServer) Router() *gin.Engine {
 	router.GET("/api/messages", s.messages)
 	router.GET("/api/traces/:trace_id", s.trace)
 	router.GET("/api/workspaces/current", s.currentWorkspace)
+	router.GET("/api/workspaces/current/summary", s.currentWorkspaceSummary)
 	router.POST("/api/workspaces", s.connectWorkspace)
 	router.POST("/api/chat", s.chat)
 	return router
@@ -166,5 +167,25 @@ func (s *HTTPServer) currentWorkspace(c *gin.Context) {
 
 	c.JSON(http.StatusOK, gin.H{
 		"workspace": workspace,
+	})
+}
+
+func (s *HTTPServer) currentWorkspaceSummary(c *gin.Context) {
+	summary, ok, err := s.service.CurrentWorkspaceSummary()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": "internal server error",
+		})
+		return
+	}
+	if !ok {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": ErrWorkspaceMissing.Error(),
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"summary": summary,
 	})
 }

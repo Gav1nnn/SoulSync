@@ -169,6 +169,20 @@ func (s *Service) CurrentWorkspace() (Workspace, bool, error) {
 	return refreshed, true, nil
 }
 
+func (s *Service) CurrentWorkspaceSummary() (WorkspaceSummary, bool, error) {
+	workspace, ok, err := s.CurrentWorkspace()
+	if err != nil || !ok {
+		return WorkspaceSummary{}, ok, err
+	}
+
+	summary, err := buildWorkspaceSummary(workspace.Path)
+	if err != nil {
+		return WorkspaceSummary{}, false, err
+	}
+
+	return summary, true, nil
+}
+
 func readWorkspace(rawPath string) (Workspace, error) {
 	trimmedPath := strings.TrimSpace(rawPath)
 	if trimmedPath == "" {

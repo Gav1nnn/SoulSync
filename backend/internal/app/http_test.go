@@ -349,6 +349,81 @@ func TestConnectWorkspaceRejectsRelativePath(t *testing.T) {
 	}
 }
 
+func TestCurrentWorkspaceSummaryScansProjectCandidates(t *testing.T) {
+	server := NewHTTPServer(newTestService(t, NewAIClient("http://127.0.0.1:1"))).Router()
+	workspacePath := newFrontendBackendFixture(t)
+
+	connectBody := bytes.NewBufferString(`{"path":"` + workspacePath + `"}`)
+	connectRequest := httptest.NewRequest(http.MethodPost, "/api/workspaces", connectBody)
+	connectRequest.Header.Set("Content-Type", "application/json")
+	connectRecorder := httptest.NewRecorder()
+	server.ServeHTTP(connectRecorder, connectRequest)
+	if connectRecorder.Code != http.StatusOK {
+		t.Fatalf("expected connect status 200, got %d: %s", connectRecorder.Code, connectRecorder.Body.String())
+	}
+
+	request := httptest.NewRequest(http.MethodGet, "/api/workspaces/current/summary", nil)
+	recorder := httptest.NewRecorder()
+	server.ServeHTTP(recorder, request)
+
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d: %s", recorder.Code, recorder.Body.String())
+	}
+
+	var response struct {
+		Summary WorkspaceSummary `json:"summary"`
+	}
+	if err := json.Unmarshal(recorder.Body.Bytes(), &response); err != nil {
+		t.Fatalf("decode summary response: %v", err)
+	}
+
+	if response.Summary.WorkspacePath != workspacePath {
+		t.Fatalf("unexpected workspace path: %#v", response.Summary)
+	}
+	if !containsString(response.Summary.PackageManagers, "npm") {
+		t.Fatalf("expected npm package manager: %#v", response.Summary.PackageManagers)
+	}
+	if !containsString(response.Summary.FrontendFrameworks, "Vue") || !containsString(response.Summary.FrontendFrameworks, "Vite") {
+		t.Fatalf("expected Vue/Vite frontend frameworks: %#v", response.Summary.FrontendFrameworks)
+	}
+	if !containsString(response.Summary.BackendFrameworks, "Gin") {
+		t.Fatalf("expected Gin backend framework: %#v", response.Summary.BackendFrameworks)
+	}
+	if !containsCandidate(response.Summary.BackendRouteCandidates, "backend/main.go") {
+		t.Fatalf("expected backend route candidate: %#v", response.Summary.BackendRouteCandidates)
+	}
+	if !containsCandidate(response.Summary.TypeFileCandidates, "frontend/src/types/user.ts") {
+		t.Fatalf("expected type file candidate: %#v", response.Summary.TypeFileCandidates)
+	}
+	if !containsCandidate(response.Summary.FrontendEntryCandidates, "frontend/src/views/UserListView.vue") {
+		t.Fatalf("expected frontend page candidate: %#v", response.Summary.FrontendEntryCandidates)
+	}
+	if !containsCandidate(response.Summary.APIClientCandidates, "frontend/src/api/users.ts") {
+		t.Fatalf("expected api client candidate: %#v", response.Summary.APIClientCandidates)
+	}
+	if !containsString(response.Summary.ValidationCommands, "cd frontend && npm run build") {
+		t.Fatalf("expected frontend build command: %#v", response.Summary.ValidationCommands)
+	}
+	if len(response.Summary.Tree) == 0 {
+		t.Fatalf("expected tree summary to be populated: %#v", response.Summary)
+	}
+}
+
+func TestCurrentWorkspaceSummaryRequiresConnectedWorkspace(t *testing.T) {
+	server := NewHTTPServer(newTestService(t, NewAIClient("http://127.0.0.1:1"))).Router()
+	request := httptest.NewRequest(http.MethodGet, "/api/workspaces/current/summary", nil)
+	recorder := httptest.NewRecorder()
+
+	server.ServeHTTP(recorder, request)
+
+	if recorder.Code != http.StatusBadRequest {
+		t.Fatalf("expected status 400, got %d", recorder.Code)
+	}
+	if !bytes.Contains(recorder.Body.Bytes(), []byte(ErrWorkspaceMissing.Error())) {
+		t.Fatalf("expected missing workspace error, got %s", recorder.Body.String())
+	}
+}
+
 func TestChatSendsRecentMessagesToAIEngine(t *testing.T) {
 	callCount := 0
 	aiClient := NewAIClientWithHTTPClient("http://ai-engine.local", &http.Client{
@@ -435,6 +510,60 @@ func newGitFixture(t *testing.T) string {
 	runTestGit(t, dir, "commit", "-m", "init fixture")
 
 	return dir
+}
+
+func newFrontendBackendFixture(t *testing.T) string {
+	t.Helper()
+
+	dir := newGitFixture(t)
+	writeFixtureFile(t, dir, "frontend/package.json", `{"scripts":{"build":"vite build","test":"vitest"},"dependencies":{"vue":"^3.5.0"},"devDependencies":{"vite":"^6.0.0"}}`)
+	writeFixtureFile(t, dir, "frontend/package-lock.json", `{"name":"fixture"}`)
+	writeFixtureFile(t, dir, "frontend/src/views/UserListView.vue", `<template><main>User list</main></template>`)
+	writeFixtureFile(t, dir, "frontend/src/api/users.ts", `export async function listUsers(){ return fetch("/api/users") }`)
+	writeFixtureFile(t, dir, "frontend/src/types/user.ts", `export type User = { id: string; name: string }`)
+	writeFixtureFile(t, dir, "backend/main.go", `package main
+
+import "github.com/gin-gonic/gin"
+
+func main() {
+	router := gin.Default()
+	router.GET("/api/users", func(c *gin.Context) {})
+}`)
+
+	runTestGit(t, dir, "add", ".")
+	runTestGit(t, dir, "commit", "-m", "add app fixture")
+
+	return dir
+}
+
+func writeFixtureFile(t *testing.T, root string, relPath string, content string) {
+	t.Helper()
+
+	absPath := filepath.Join(root, filepath.FromSlash(relPath))
+	if err := os.MkdirAll(filepath.Dir(absPath), 0o755); err != nil {
+		t.Fatalf("create fixture dir: %v", err)
+	}
+	if err := os.WriteFile(absPath, []byte(content), 0o644); err != nil {
+		t.Fatalf("write fixture file %s: %v", relPath, err)
+	}
+}
+
+func containsString(values []string, expected string) bool {
+	for _, value := range values {
+		if value == expected {
+			return true
+		}
+	}
+	return false
+}
+
+func containsCandidate(candidates []WorkspaceCandidate, expectedPath string) bool {
+	for _, candidate := range candidates {
+		if candidate.Path == expectedPath {
+			return true
+		}
+	}
+	return false
 }
 
 func runTestGit(t *testing.T, dir string, args ...string) {
