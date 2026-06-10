@@ -53,6 +53,34 @@ type AIGenerateResponse struct {
 	MemoryCandidates      []MemoryCandidate `json:"memory_candidates"`
 }
 
+type AIAgentPlanRequest struct {
+	Goal             string                `json:"goal"`
+	WorkspaceSummary WorkspaceSummary      `json:"workspace_summary"`
+	CharacterName    string                `json:"character_name"`
+	Persona          PersonaProfile        `json:"persona"`
+	Memories         []MemoryContext       `json:"memories"`
+	RecentMessages   []ConversationMessage `json:"recent_messages"`
+	ProjectContext   []string              `json:"project_context"`
+}
+
+type AIAgentPlanResponse struct {
+	Plan                  []string        `json:"plan"`
+	FilesToRead           []string        `json:"files_to_read"`
+	InitialAction         AgentPlanAction `json:"initial_action"`
+	ContextUsed           []string        `json:"context_used"`
+	UsedMemoryIDs         []string        `json:"used_memory_ids"`
+	UsedKnowledgeChunkIDs []string        `json:"used_knowledge_chunk_ids"`
+	Planner               string          `json:"planner"`
+}
+
+type AgentPlanAction struct {
+	Type    string `json:"type"`
+	Path    string `json:"path,omitempty"`
+	Query   string `json:"query,omitempty"`
+	Command string `json:"command,omitempty"`
+	Reason  string `json:"reason"`
+}
+
 type Trace struct {
 	TraceID               string    `json:"trace_id"`
 	UserMessage           string    `json:"user_message"`
@@ -138,19 +166,23 @@ const (
 )
 
 type AgentTask struct {
-	ID           string             `json:"id"`
-	Goal         string             `json:"goal"`
-	Status       AgentTaskStatus    `json:"status"`
-	Workspace    *Workspace         `json:"workspace,omitempty"`
-	BranchName   string             `json:"branch_name,omitempty"`
-	Plan         []string           `json:"plan"`
-	Logs         []AgentTaskLog     `json:"logs"`
-	ChangedFiles []string           `json:"changed_files"`
-	Verification *AgentVerification `json:"verification,omitempty"`
-	Error        string             `json:"error,omitempty"`
-	CreatedAt    time.Time          `json:"created_at"`
-	UpdatedAt    time.Time          `json:"updated_at"`
-	CompletedAt  *time.Time         `json:"completed_at,omitempty"`
+	ID                 string             `json:"id"`
+	Goal               string             `json:"goal"`
+	Status             AgentTaskStatus    `json:"status"`
+	Workspace          *Workspace         `json:"workspace,omitempty"`
+	BranchName         string             `json:"branch_name,omitempty"`
+	Plan               []string           `json:"plan"`
+	FilesToRead        []string           `json:"files_to_read"`
+	InitialAction      *AgentPlanAction   `json:"initial_action,omitempty"`
+	Planner            string             `json:"planner,omitempty"`
+	PlannerContextUsed []string           `json:"planner_context_used"`
+	Logs               []AgentTaskLog     `json:"logs"`
+	ChangedFiles       []string           `json:"changed_files"`
+	Verification       *AgentVerification `json:"verification,omitempty"`
+	Error              string             `json:"error,omitempty"`
+	CreatedAt          time.Time          `json:"created_at"`
+	UpdatedAt          time.Time          `json:"updated_at"`
+	CompletedAt        *time.Time         `json:"completed_at,omitempty"`
 }
 
 type AgentTaskLog struct {

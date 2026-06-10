@@ -20,6 +20,14 @@ export type AgentVerification = {
   output: string[];
 };
 
+export type AgentPlanAction = {
+  type: string;
+  path?: string;
+  query?: string;
+  command?: string;
+  reason: string;
+};
+
 export type AgentTask = {
   id: string;
   goal: string;
@@ -27,6 +35,10 @@ export type AgentTask = {
   workspace?: Workspace;
   branch_name?: string;
   plan: string[];
+  files_to_read: string[];
+  initial_action?: AgentPlanAction;
+  planner?: string;
+  planner_context_used: string[];
   logs: AgentTaskLog[];
   changed_files: string[];
   verification?: AgentVerification;

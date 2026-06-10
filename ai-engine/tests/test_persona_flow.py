@@ -3,6 +3,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from app.llm.client import LLMClientError, current_provider, filter_memory_candidates, load_settings
+from app.orchestration.agent_plan import generate_agent_plan
 from app.orchestration.generate_reply import generate_reply
 from app.persona.examples import berry_few_shot_messages
 from app.persona.profile import PersonaProfile, default_berry_persona
@@ -12,7 +13,15 @@ from app.retrieval.chunker import chunk_markdown_document
 from app.retrieval.embedder import EmbeddingUnavailableError
 from app.retrieval.retriever import retrieve_knowledge_result, tokenize
 from app.retrieval.schemas import RetrievalHit, RetrievalResult
-from app.schemas import ConversationMessage, GenerateRequest, MemoryCandidate, MemoryContext
+from app.schemas import (
+    AgentPlanRequest,
+    GenerateRequest,
+    MemoryCandidate,
+    MemoryContext,
+    ConversationMessage,
+    WorkspaceCandidate,
+    WorkspaceSummary,
+)
 
 
 class PersonaFlowTests(unittest.TestCase):
@@ -22,6 +31,50 @@ class PersonaFlowTests(unittest.TestCase):
         self.assertEqual(request.character_id, "berry")
         self.assertEqual(request.character_name, "Berry")
         self.assertEqual(request.persona, default_berry_persona())
+
+    @patch("app.orchestration.agent_plan.retrieve_knowledge_result")
+    @patch("app.orchestration.agent_plan.generate_llm_agent_plan")
+    def test_agent_plan_falls_back_with_workspace_context(
+        self,
+        mock_generate_llm_agent_plan,
+        mock_retrieve_knowledge_result,
+    ) -> None:
+        mock_generate_llm_agent_plan.side_effect = LLMClientError("llm disabled")
+        mock_retrieve_knowledge_result.return_value = RetrievalResult(hits=[], strategies=["knowledge.keyword"])
+        request = AgentPlanRequest(
+            goal="根据用户列表接口生成页面",
+            workspace_summary=WorkspaceSummary(
+                workspace_path="/tmp/project",
+                root_name="project",
+                backend_route_candidates=[
+                    WorkspaceCandidate(path="backend/main.go", kind="go.gin.routes", reason="route")
+                ],
+                api_client_candidates=[
+                    WorkspaceCandidate(path="frontend/src/api/users.ts", kind="frontend.api_client", reason="api")
+                ],
+                frontend_entry_candidates=[
+                    WorkspaceCandidate(path="frontend/src/views/UserListView.vue", kind="frontend.page", reason="page")
+                ],
+                validation_commands=["cd frontend && npm run build"],
+            ),
+            memories=[
+                MemoryContext(id="mem-1", type="frontend_convention", content="页面使用 Vue 3。")
+            ],
+            recent_messages=[ConversationMessage(role="user", content="按项目风格来")],
+        )
+
+        response = generate_agent_plan(request)
+
+        self.assertEqual(response.planner, "mock_planner")
+        self.assertIn("persona", response.context_used)
+        self.assertIn("workspace.summary", response.context_used)
+        self.assertIn("memory", response.context_used)
+        self.assertIn("conversation", response.context_used)
+        self.assertIn("knowledge.keyword", response.context_used)
+        self.assertEqual(response.used_memory_ids, ["mem-1"])
+        self.assertEqual(response.initial_action.type, "read_file")
+        self.assertEqual(response.initial_action.path, "backend/main.go")
+        self.assertIn("frontend/src/api/users.ts", response.files_to_read)
 
     def test_prompt_builder_contains_core_persona_fields(self) -> None:
         persona = default_berry_persona()

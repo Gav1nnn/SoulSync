@@ -22,20 +22,22 @@ func (s *AgentTaskStore) Create(goal string, workspace *Workspace, now time.Time
 	defer s.mu.Unlock()
 
 	task := AgentTask{
-		ID:           fmt.Sprintf("task-%d", now.UnixNano()),
-		Goal:         goal,
-		Status:       AgentTaskQueued,
-		Workspace:    workspace,
-		Plan:         []string{},
-		Logs:         []AgentTaskLog{},
-		ChangedFiles: []string{},
-		CreatedAt:    now,
-		UpdatedAt:    now,
+		ID:                 fmt.Sprintf("task-%d", now.UnixNano()),
+		Goal:               goal,
+		Status:             AgentTaskQueued,
+		Workspace:          workspace,
+		Plan:               []string{},
+		FilesToRead:        []string{},
+		PlannerContextUsed: []string{},
+		Logs:               []AgentTaskLog{},
+		ChangedFiles:       []string{},
+		CreatedAt:          now,
+		UpdatedAt:          now,
 	}
 	task.Logs = append(task.Logs, AgentTaskLog{
 		At:      now,
 		Status:  AgentTaskQueued,
-		Message: "Task queued with mock planner.",
+		Message: "Task queued.",
 	})
 
 	s.tasks[task.ID] = task
@@ -71,6 +73,8 @@ func (s *AgentTaskStore) Update(id string, update func(*AgentTask)) (AgentTask, 
 
 func cloneAgentTask(task AgentTask) AgentTask {
 	task.Plan = append([]string{}, task.Plan...)
+	task.FilesToRead = append([]string{}, task.FilesToRead...)
+	task.PlannerContextUsed = append([]string{}, task.PlannerContextUsed...)
 	task.Logs = append([]AgentTaskLog{}, task.Logs...)
 	task.ChangedFiles = append([]string{}, task.ChangedFiles...)
 	if task.Workspace != nil {
@@ -81,6 +85,10 @@ func cloneAgentTask(task AgentTask) AgentTask {
 		verification := *task.Verification
 		verification.Output = append([]string{}, task.Verification.Output...)
 		task.Verification = &verification
+	}
+	if task.InitialAction != nil {
+		initialAction := *task.InitialAction
+		task.InitialAction = &initialAction
 	}
 	if task.CompletedAt != nil {
 		completedAt := *task.CompletedAt

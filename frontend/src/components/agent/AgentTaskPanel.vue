@@ -102,7 +102,7 @@ onBeforeUnmount(() => {
     <div class="agent-head">
       <div>
         <p class="eyebrow">Agent Task</p>
-        <h2>Mock 任务运行</h2>
+        <h2>Agent 任务运行</h2>
       </div>
       <span v-if="task" class="status-pill" :class="`status-${task.status}`">
         {{ statusLabels[task.status] }}
@@ -123,6 +123,7 @@ onBeforeUnmount(() => {
       <div class="task-meta">
         <code>{{ task.id }}</code>
         <code v-if="task.branch_name">{{ task.branch_name }}</code>
+        <span v-if="task.planner">{{ task.planner }}</span>
         <span>{{ formatTime(task.updated_at) }}</span>
         <span v-if="isActiveTask">polling</span>
       </div>
@@ -133,6 +134,34 @@ onBeforeUnmount(() => {
           <li v-for="step in task.plan" :key="step">{{ step }}</li>
           <li v-if="!task.plan.length" class="muted-row">等待 mock planner 输出。</li>
         </ol>
+      </section>
+
+      <section class="task-section">
+        <p class="section-title">Planner Context</p>
+        <div class="tag-list" v-if="task.planner_context_used.length">
+          <span v-for="item in task.planner_context_used" :key="item">{{ item }}</span>
+        </div>
+        <p v-else class="muted-row">等待 planner 上下文。</p>
+      </section>
+
+      <section class="task-section">
+        <p class="section-title">Read Queue</p>
+        <ul class="file-list">
+          <li v-for="file in task.files_to_read" :key="file">
+            <code>{{ file }}</code>
+          </li>
+          <li v-if="!task.files_to_read.length" class="muted-row">planner 暂未指定读取文件。</li>
+        </ul>
+      </section>
+
+      <section class="task-section" v-if="task.initial_action">
+        <p class="section-title">Initial Action</p>
+        <div class="action-box">
+          <span>{{ task.initial_action.type }}</span>
+          <code v-if="task.initial_action.path">{{ task.initial_action.path }}</code>
+          <code v-if="task.initial_action.query">{{ task.initial_action.query }}</code>
+          <p>{{ task.initial_action.reason }}</p>
+        </div>
       </section>
 
       <section class="task-section">
@@ -169,7 +198,7 @@ onBeforeUnmount(() => {
       <p v-if="task.error" class="error-copy">{{ task.error }}</p>
     </template>
 
-    <p v-else class="muted-row">先连接 workspace，再创建 mock task。</p>
+    <p v-else class="muted-row">先连接 workspace，再创建 agent task。</p>
     <p v-if="errorMessage" class="error-copy">{{ errorMessage }}</p>
   </section>
 </template>
@@ -376,7 +405,8 @@ h2 {
   font-size: 0.78rem;
 }
 
-.verification-box {
+.verification-box,
+.action-box {
   display: grid;
   gap: 5px;
   padding: 10px;
@@ -385,7 +415,8 @@ h2 {
   background: rgba(255, 255, 255, 0.42);
 }
 
-.verification-box span {
+.verification-box span,
+.action-box span {
   color: #3e765e;
   font-size: 0.78rem;
   font-weight: 900;
@@ -400,9 +431,32 @@ h2 {
   color: #9a5140;
 }
 
-.verification-box p {
+.verification-box p,
+.action-box p {
   margin: 0;
   color: #60717a;
+}
+
+.action-box code {
+  color: #294654;
+  font-family: "Menlo", "Monaco", "Courier New", monospace;
+  overflow-wrap: anywhere;
+}
+
+.tag-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
+.tag-list span {
+  border: 1px solid rgba(43, 76, 88, 0.1);
+  border-radius: 999px;
+  padding: 7px 9px;
+  color: #315f70;
+  background: rgba(255, 255, 255, 0.48);
+  font-size: 0.78rem;
+  font-weight: 800;
 }
 
 .muted-row {

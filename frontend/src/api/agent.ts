@@ -57,6 +57,8 @@ async function decodeAgentTaskResponse(
     !payload.task.goal ||
     !payload.task.status ||
     !Array.isArray(payload.task.plan) ||
+    !Array.isArray(payload.task.files_to_read) ||
+    !Array.isArray(payload.task.planner_context_used) ||
     !Array.isArray(payload.task.logs) ||
     !Array.isArray(payload.task.changed_files)
   ) {

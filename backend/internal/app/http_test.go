@@ -443,8 +443,34 @@ func TestCreateAgentTaskRequiresConnectedWorkspace(t *testing.T) {
 	}
 }
 
-func TestCreateAgentTaskRunsMockLifecycle(t *testing.T) {
-	server := NewHTTPServer(newTestService(t, NewAIClient("http://127.0.0.1:1"))).Router()
+func TestCreateAgentTaskRunsPlannerLifecycle(t *testing.T) {
+	aiClient := NewAIClientWithHTTPClient("http://ai-engine.local", &http.Client{
+		Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
+			if r.Method != http.MethodPost || r.URL.Path != "/agent/plan" {
+				t.Fatalf("unexpected request: %s %s", r.Method, r.URL.Path)
+			}
+
+			var request AIAgentPlanRequest
+			if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+				t.Fatalf("decode plan request: %v", err)
+			}
+			if request.Goal != "根据用户列表接口生成 Vue 页面" {
+				t.Fatalf("unexpected goal: %q", request.Goal)
+			}
+			if request.WorkspaceSummary.WorkspacePath == "" || request.Persona.Background == "" {
+				t.Fatalf("expected planner context to be populated: %#v", request)
+			}
+
+			return &http.Response{
+				StatusCode: http.StatusOK,
+				Header:     http.Header{"Content-Type": []string{"application/json"}},
+				Body: io.NopCloser(bytes.NewBufferString(
+					`{"plan":["读取用户接口","读取前端页面结构","给出页面改动计划"],"files_to_read":["backend/main.go","frontend/src/api/users.ts"],"initial_action":{"type":"read_file","path":"backend/main.go","reason":"先确认接口定义"},"context_used":["persona","workspace.summary","mock_planner"],"used_memory_ids":[],"used_knowledge_chunk_ids":[],"planner":"mock_planner"}`,
+				)),
+			}, nil
+		}),
+	})
+	server := NewHTTPServer(newTestService(t, aiClient)).Router()
 	workspacePath := newFrontendBackendFixture(t)
 
 	connectBody := bytes.NewBufferString(`{"path":"` + workspacePath + `"}`)
@@ -482,6 +508,15 @@ func TestCreateAgentTaskRunsMockLifecycle(t *testing.T) {
 	}
 	if len(task.Plan) == 0 {
 		t.Fatalf("expected plan to be populated: %#v", task)
+	}
+	if task.Planner != "mock_planner" {
+		t.Fatalf("expected planner to be stored: %#v", task)
+	}
+	if len(task.PlannerContextUsed) == 0 || task.PlannerContextUsed[0] != "persona" {
+		t.Fatalf("expected planner context to be stored: %#v", task.PlannerContextUsed)
+	}
+	if len(task.FilesToRead) != 2 || task.InitialAction == nil || task.InitialAction.Path != "backend/main.go" {
+		t.Fatalf("expected planner read queue and initial action: %#v", task)
 	}
 	if len(task.Logs) < 4 {
 		t.Fatalf("expected lifecycle logs: %#v", task.Logs)

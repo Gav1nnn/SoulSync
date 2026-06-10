@@ -202,7 +202,7 @@ func (s *Service) CreateAgentTask(goal string) (AgentTask, error) {
 
 	taskWorkspace := workspace
 	task := s.agentTaskStore.Create(trimmedGoal, &taskWorkspace, time.Now())
-	go s.runMockAgentTask(task.ID)
+	go s.runAgentTask(task.ID)
 
 	return task, nil
 }
@@ -216,8 +216,8 @@ func (s *Service) AgentTask(id string) (AgentTask, error) {
 	return task, nil
 }
 
-func (s *Service) runMockAgentTask(taskID string) {
-	s.transitionAgentTask(taskID, AgentTaskPlanning, "Mock planner is reading workspace summary.")
+func (s *Service) runAgentTask(taskID string) {
+	s.transitionAgentTask(taskID, AgentTaskPlanning, "Python planner is reading workspace summary.")
 
 	task, ok := s.agentTaskStore.Get(taskID)
 	if !ok || task.Workspace == nil {
@@ -231,13 +231,35 @@ func (s *Service) runMockAgentTask(taskID string) {
 		return
 	}
 
-	plan := mockAgentPlan(task.Goal, summary)
+	agentPlan, err := s.aiClient.Plan(context.Background(), AIAgentPlanRequest{
+		Goal:             task.Goal,
+		WorkspaceSummary: summary,
+		CharacterName:    defaultCharacterName,
+		Persona:          DefaultBerryPersona(),
+		Memories:         memoriesToContext(s.memoryStore.ListMemories()),
+		RecentMessages:   messagesToConversationContext(s.memoryStore.RecentMessages(8)),
+		ProjectContext:   workspaceSummaryContext(summary),
+	})
+	if err != nil {
+		s.failAgentTask(taskID, fmt.Sprintf("agent planner failed: %v", err))
+		return
+	}
+	if len(agentPlan.Plan) == 0 {
+		s.failAgentTask(taskID, "agent planner returned an empty plan")
+		return
+	}
+
 	s.agentTaskStore.Update(taskID, func(task *AgentTask) {
-		task.Plan = plan
+		initialAction := agentPlan.InitialAction
+		task.Plan = agentPlan.Plan
+		task.FilesToRead = agentPlan.FilesToRead
+		task.InitialAction = &initialAction
+		task.Planner = agentPlan.Planner
+		task.PlannerContextUsed = agentPlan.ContextUsed
 		task.Logs = append(task.Logs, AgentTaskLog{
 			At:      time.Now(),
 			Status:  AgentTaskPlanning,
-			Message: fmt.Sprintf("Mock planner produced %d plan steps.", len(plan)),
+			Message: fmt.Sprintf("Planner %s produced %d plan steps.", agentPlan.Planner, len(agentPlan.Plan)),
 		})
 	})
 
@@ -255,7 +277,7 @@ func (s *Service) runMockAgentTask(taskID string) {
 		})
 	})
 
-	s.transitionAgentTask(taskID, AgentTaskRunning, "Mock runner is writing a bounded test file inside the workspace.")
+	s.transitionAgentTask(taskID, AgentTaskRunning, "Safe executor is writing a bounded test file inside the workspace.")
 	changedFile, err := writeAgentTaskTestFile(task.Workspace.Path, taskID, task.Goal)
 	if err != nil {
 		s.failAgentTask(taskID, fmt.Sprintf("write mock task file failed: %v", err))
@@ -317,23 +339,33 @@ func (s *Service) failAgentTask(taskID string, message string) {
 	})
 }
 
-func mockAgentPlan(goal string, summary WorkspaceSummary) []string {
-	steps := []string{
-		"确认用户目标：" + goal,
-		"读取 workspace 摘要，定位前端入口、API client 和后端路由候选。",
+func workspaceSummaryContext(summary WorkspaceSummary) []string {
+	context := []string{
+		"workspace=" + summary.RootName,
+		"package_managers=" + strings.Join(summary.PackageManagers, ","),
+		"frontend_frameworks=" + strings.Join(summary.FrontendFrameworks, ","),
+		"backend_frameworks=" + strings.Join(summary.BackendFrameworks, ","),
 	}
-	if len(summary.BackendRouteCandidates) > 0 {
-		steps = append(steps, "优先查看后端路由候选："+summary.BackendRouteCandidates[0].Path)
+	appendCandidate := func(label string, candidates []WorkspaceCandidate) {
+		for index, candidate := range candidates {
+			if index >= 4 {
+				break
+			}
+			context = append(context, fmt.Sprintf("%s=%s (%s)", label, candidate.Path, candidate.Kind))
+		}
 	}
-	if len(summary.FrontendEntryCandidates) > 0 {
-		steps = append(steps, "参考前端入口或页面："+summary.FrontendEntryCandidates[0].Path)
+	appendCandidate("route_candidate", summary.BackendRouteCandidates)
+	appendCandidate("api_client_candidate", summary.APIClientCandidates)
+	appendCandidate("frontend_entry_candidate", summary.FrontendEntryCandidates)
+	appendCandidate("type_candidate", summary.TypeFileCandidates)
+	for index, command := range summary.ValidationCommands {
+		if index >= 4 {
+			break
+		}
+		context = append(context, "validation_command="+command)
 	}
-	if len(summary.APIClientCandidates) > 0 {
-		steps = append(steps, "复用 API client 候选："+summary.APIClientCandidates[0].Path)
-	}
-	steps = append(steps, "创建独立分支，写入 mock 测试文件，并运行白名单验证命令。")
 
-	return steps
+	return context
 }
 
 func agentTaskBranchName(now time.Time) string {
