@@ -25,7 +25,31 @@ export type AgentPlanAction = {
   path?: string;
   query?: string;
   command?: string;
+  content?: string;
   reason: string;
+};
+
+export type AgentObservation = {
+  status: string;
+  message: string;
+  path?: string;
+  items?: string[];
+  matches?: string[];
+  content?: string;
+  command?: string;
+  output?: string[];
+};
+
+export type AgentTaskStep = {
+  index: number;
+  action: AgentPlanAction;
+  observation: AgentObservation;
+  summary: string;
+  context_used: string[];
+  stepper: string;
+  started_at: string;
+  finished_at: string;
+  duration_ms: number;
 };
 
 export type AgentTask = {
@@ -39,6 +63,7 @@ export type AgentTask = {
   initial_action?: AgentPlanAction;
   planner?: string;
   planner_context_used: string[];
+  steps: AgentTaskStep[];
   logs: AgentTaskLog[];
   changed_files: string[];
   verification?: AgentVerification;

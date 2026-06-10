@@ -444,9 +444,31 @@ func TestCreateAgentTaskRequiresConnectedWorkspace(t *testing.T) {
 }
 
 func TestCreateAgentTaskRunsPlannerLifecycle(t *testing.T) {
+	stepCalls := 0
 	aiClient := NewAIClientWithHTTPClient("http://ai-engine.local", &http.Client{
 		Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
-			if r.Method != http.MethodPost || r.URL.Path != "/agent/plan" {
+			if r.Method != http.MethodPost {
+				t.Fatalf("unexpected request: %s %s", r.Method, r.URL.Path)
+			}
+
+			if r.URL.Path == "/agent/step" {
+				stepCalls++
+				var request AIAgentStepRequest
+				if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+					t.Fatalf("decode step request: %v", err)
+				}
+				if request.PreviousObservation == nil || request.PreviousObservation.Path != "backend/main.go" {
+					t.Fatalf("expected previous observation to be sent: %#v", request)
+				}
+				return &http.Response{
+					StatusCode: http.StatusOK,
+					Header:     http.Header{"Content-Type": []string{"application/json"}},
+					Body: io.NopCloser(bytes.NewBufferString(
+						`{"summary":"已读取接口入口，当前阶段只读完成。","action":{"type":"finish","reason":"等待接口识别阶段继续。"},"context_used":["persona","workspace.summary","agent.observation","mock_stepper"],"stepper":"mock_stepper"}`,
+					)),
+				}, nil
+			}
+			if r.URL.Path != "/agent/plan" {
 				t.Fatalf("unexpected request: %s %s", r.Method, r.URL.Path)
 			}
 
@@ -521,17 +543,23 @@ func TestCreateAgentTaskRunsPlannerLifecycle(t *testing.T) {
 	if len(task.Logs) < 4 {
 		t.Fatalf("expected lifecycle logs: %#v", task.Logs)
 	}
-	if task.Verification == nil || task.Verification.Status != "passed" {
+	if len(task.Steps) != 2 {
+		t.Fatalf("expected read and finish steps: %#v", task.Steps)
+	}
+	if task.Steps[0].Action.Type != "read_file" || task.Steps[0].Observation.Path != "backend/main.go" {
+		t.Fatalf("expected first step to read backend/main.go: %#v", task.Steps[0])
+	}
+	if task.Steps[1].Action.Type != "finish" {
+		t.Fatalf("expected second step to finish: %#v", task.Steps[1])
+	}
+	if stepCalls != 1 {
+		t.Fatalf("expected one stepper call, got %d", stepCalls)
+	}
+	if task.Verification == nil || task.Verification.Status != "skipped" {
 		t.Fatalf("expected skipped verification: %#v", task.Verification)
 	}
-	if len(task.ChangedFiles) != 1 {
-		t.Fatalf("expected one changed file in safe execution stage: %#v", task.ChangedFiles)
-	}
-	if task.ChangedFiles[0] != ".soulsync/"+task.ID+".md" {
-		t.Fatalf("unexpected changed file: %#v", task.ChangedFiles)
-	}
-	if _, err := os.Stat(filepath.Join(workspacePath, filepath.FromSlash(task.ChangedFiles[0]))); err != nil {
-		t.Fatalf("expected changed file to exist: %v", err)
+	if len(task.ChangedFiles) != 0 {
+		t.Fatalf("expected no changed files in read-only stepper stage: %#v", task.ChangedFiles)
 	}
 	currentBranch := strings.TrimSpace(runTestGitOutput(t, workspacePath, "branch", "--show-current"))
 	if currentBranch != task.BranchName {

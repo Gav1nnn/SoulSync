@@ -64,21 +64,59 @@ type AIAgentPlanRequest struct {
 }
 
 type AIAgentPlanResponse struct {
-	Plan                  []string        `json:"plan"`
-	FilesToRead           []string        `json:"files_to_read"`
-	InitialAction         AgentPlanAction `json:"initial_action"`
-	ContextUsed           []string        `json:"context_used"`
-	UsedMemoryIDs         []string        `json:"used_memory_ids"`
-	UsedKnowledgeChunkIDs []string        `json:"used_knowledge_chunk_ids"`
-	Planner               string          `json:"planner"`
+	Plan                  []string    `json:"plan"`
+	FilesToRead           []string    `json:"files_to_read"`
+	InitialAction         AgentAction `json:"initial_action"`
+	ContextUsed           []string    `json:"context_used"`
+	UsedMemoryIDs         []string    `json:"used_memory_ids"`
+	UsedKnowledgeChunkIDs []string    `json:"used_knowledge_chunk_ids"`
+	Planner               string      `json:"planner"`
 }
 
-type AgentPlanAction struct {
+type AIAgentStepRequest struct {
+	Goal                string            `json:"goal"`
+	Plan                []string          `json:"plan"`
+	WorkspaceSummary    WorkspaceSummary  `json:"workspace_summary"`
+	StepIndex           int               `json:"step_index"`
+	PreviousObservation *AgentObservation `json:"previous_observation,omitempty"`
+	ReadFiles           []AgentReadFile   `json:"read_files"`
+	ChangedFiles        []string          `json:"changed_files"`
+	RecentSteps         []AgentTaskStep   `json:"recent_steps"`
+	CharacterName       string            `json:"character_name"`
+	Persona             PersonaProfile    `json:"persona"`
+	ProjectContext      []string          `json:"project_context"`
+}
+
+type AIAgentStepResponse struct {
+	Action      AgentAction `json:"action"`
+	Summary     string      `json:"summary"`
+	ContextUsed []string    `json:"context_used"`
+	Stepper     string      `json:"stepper"`
+}
+
+type AgentAction struct {
 	Type    string `json:"type"`
 	Path    string `json:"path,omitempty"`
 	Query   string `json:"query,omitempty"`
 	Command string `json:"command,omitempty"`
+	Content string `json:"content,omitempty"`
 	Reason  string `json:"reason"`
+}
+
+type AgentObservation struct {
+	Status  string   `json:"status"`
+	Message string   `json:"message"`
+	Path    string   `json:"path,omitempty"`
+	Items   []string `json:"items,omitempty"`
+	Matches []string `json:"matches,omitempty"`
+	Content string   `json:"content,omitempty"`
+	Command string   `json:"command,omitempty"`
+	Output  []string `json:"output,omitempty"`
+}
+
+type AgentReadFile struct {
+	Path    string `json:"path"`
+	Content string `json:"content"`
 }
 
 type Trace struct {
@@ -173,9 +211,10 @@ type AgentTask struct {
 	BranchName         string             `json:"branch_name,omitempty"`
 	Plan               []string           `json:"plan"`
 	FilesToRead        []string           `json:"files_to_read"`
-	InitialAction      *AgentPlanAction   `json:"initial_action,omitempty"`
+	InitialAction      *AgentAction       `json:"initial_action,omitempty"`
 	Planner            string             `json:"planner,omitempty"`
 	PlannerContextUsed []string           `json:"planner_context_used"`
+	Steps              []AgentTaskStep    `json:"steps"`
 	Logs               []AgentTaskLog     `json:"logs"`
 	ChangedFiles       []string           `json:"changed_files"`
 	Verification       *AgentVerification `json:"verification,omitempty"`
@@ -189,6 +228,18 @@ type AgentTaskLog struct {
 	At      time.Time       `json:"at"`
 	Status  AgentTaskStatus `json:"status"`
 	Message string          `json:"message"`
+}
+
+type AgentTaskStep struct {
+	Index       int              `json:"index"`
+	Action      AgentAction      `json:"action"`
+	Observation AgentObservation `json:"observation"`
+	Summary     string           `json:"summary"`
+	ContextUsed []string         `json:"context_used"`
+	Stepper     string           `json:"stepper"`
+	StartedAt   time.Time        `json:"started_at"`
+	FinishedAt  time.Time        `json:"finished_at"`
+	DurationMS  int64            `json:"duration_ms"`
 }
 
 type AgentVerification struct {

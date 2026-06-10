@@ -71,6 +71,7 @@ class AgentPlanAction(BaseModel):
     path: str | None = None
     query: str | None = None
     command: str | None = None
+    content: str | None = None
     reason: str = ""
 
 
@@ -92,3 +93,52 @@ class AgentPlanResponse(BaseModel):
     used_memory_ids: list[str] = Field(default_factory=list)
     used_knowledge_chunk_ids: list[str] = Field(default_factory=list)
     planner: str
+
+
+class AgentObservation(BaseModel):
+    status: str
+    message: str
+    path: str | None = None
+    items: list[str] = Field(default_factory=list)
+    matches: list[str] = Field(default_factory=list)
+    content: str | None = None
+    command: str | None = None
+    output: list[str] = Field(default_factory=list)
+
+
+class AgentReadFile(BaseModel):
+    path: str
+    content: str
+
+
+class AgentTaskStep(BaseModel):
+    index: int
+    action: AgentPlanAction
+    observation: AgentObservation
+    summary: str = ""
+    context_used: list[str] = Field(default_factory=list)
+    stepper: str = ""
+    started_at: str | None = None
+    finished_at: str | None = None
+    duration_ms: int = 0
+
+
+class AgentStepRequest(BaseModel):
+    goal: str = Field(min_length=1)
+    plan: list[str] = Field(default_factory=list)
+    workspace_summary: WorkspaceSummary
+    step_index: int = 1
+    previous_observation: AgentObservation | None = None
+    read_files: list[AgentReadFile] = Field(default_factory=list)
+    changed_files: list[str] = Field(default_factory=list)
+    recent_steps: list[AgentTaskStep] = Field(default_factory=list)
+    character_name: str = "Berry"
+    persona: PersonaProfile = Field(default_factory=default_berry_persona)
+    project_context: list[str] = Field(default_factory=list)
+
+
+class AgentStepResponse(BaseModel):
+    action: AgentPlanAction
+    summary: str = ""
+    context_used: list[str] = Field(default_factory=list)
+    stepper: str

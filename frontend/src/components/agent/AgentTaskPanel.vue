@@ -165,6 +165,35 @@ onBeforeUnmount(() => {
       </section>
 
       <section class="task-section">
+        <p class="section-title">Steps</p>
+        <ol v-if="task.steps.length" class="step-list">
+          <li v-for="step in task.steps" :key="step.index">
+            <div class="step-head">
+              <strong>#{{ step.index }} {{ step.action.type }}</strong>
+              <span>{{ step.observation.status }}</span>
+              <small>{{ step.duration_ms }}ms</small>
+            </div>
+            <div class="step-targets">
+              <code v-if="step.action.path">{{ step.action.path }}</code>
+              <code v-if="step.action.query">{{ step.action.query }}</code>
+              <code v-if="step.action.command">{{ step.action.command }}</code>
+            </div>
+            <p>{{ step.summary || step.observation.message }}</p>
+            <ul v-if="step.observation.items?.length" class="compact-list">
+              <li v-for="item in step.observation.items.slice(0, 8)" :key="item">{{ item }}</li>
+            </ul>
+            <ul v-if="step.observation.matches?.length" class="compact-list">
+              <li v-for="match in step.observation.matches.slice(0, 8)" :key="match">{{ match }}</li>
+            </ul>
+            <div v-if="step.context_used.length" class="tag-list compact-tags">
+              <span v-for="item in step.context_used" :key="`${step.index}-${item}`">{{ item }}</span>
+            </div>
+          </li>
+        </ol>
+        <p v-else class="muted-row">等待 stepper 执行动作。</p>
+      </section>
+
+      <section class="task-section">
         <p class="section-title">Logs</p>
         <ul class="log-list">
           <li v-for="log in task.logs" :key="`${log.at}-${log.message}`">
@@ -349,7 +378,9 @@ h2 {
 
 .plan-list,
 .log-list,
-.file-list {
+.file-list,
+.step-list,
+.compact-list {
   display: grid;
   gap: 7px;
   margin: 0;
@@ -359,6 +390,7 @@ h2 {
 .plan-list li,
 .log-list li,
 .file-list li,
+.step-list li,
 .verification-box {
   color: #294654;
   line-height: 1.45;
@@ -366,7 +398,8 @@ h2 {
 }
 
 .log-list,
-.file-list {
+.file-list,
+.step-list {
   padding-left: 0;
   list-style: none;
 }
@@ -376,6 +409,56 @@ h2 {
   border: 1px solid rgba(43, 76, 88, 0.08);
   border-radius: 14px;
   background: rgba(255, 255, 255, 0.42);
+}
+
+.step-list li {
+  display: grid;
+  gap: 7px;
+  padding: 10px;
+  border: 1px solid rgba(43, 76, 88, 0.08);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.42);
+}
+
+.step-head,
+.step-targets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.step-head strong {
+  color: #315f70;
+  font-size: 0.82rem;
+}
+
+.step-head span,
+.step-head small {
+  color: #60717a;
+  font-size: 0.78rem;
+  font-weight: 800;
+}
+
+.step-list p {
+  margin: 0;
+  color: #60717a;
+}
+
+.compact-list {
+  padding-left: 16px;
+}
+
+.compact-list li {
+  overflow-wrap: anywhere;
+}
+
+.compact-tags {
+  gap: 5px;
+}
+
+.compact-tags span {
+  padding: 5px 7px;
 }
 
 .file-list code {

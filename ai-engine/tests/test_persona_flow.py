@@ -4,6 +4,7 @@ from unittest.mock import patch
 
 from app.llm.client import LLMClientError, current_provider, filter_memory_candidates, load_settings
 from app.orchestration.agent_plan import generate_agent_plan
+from app.orchestration.agent_step import generate_agent_step
 from app.orchestration.generate_reply import generate_reply
 from app.persona.examples import berry_few_shot_messages
 from app.persona.profile import PersonaProfile, default_berry_persona
@@ -15,6 +16,9 @@ from app.retrieval.retriever import retrieve_knowledge_result, tokenize
 from app.retrieval.schemas import RetrievalHit, RetrievalResult
 from app.schemas import (
     AgentPlanRequest,
+    AgentStepRequest,
+    AgentObservation,
+    AgentReadFile,
     GenerateRequest,
     MemoryCandidate,
     MemoryContext,
@@ -75,6 +79,68 @@ class PersonaFlowTests(unittest.TestCase):
         self.assertEqual(response.initial_action.type, "read_file")
         self.assertEqual(response.initial_action.path, "backend/main.go")
         self.assertIn("frontend/src/api/users.ts", response.files_to_read)
+
+    @patch("app.orchestration.agent_step.generate_llm_agent_step")
+    def test_agent_step_fallback_reads_next_candidate_then_finishes(
+        self,
+        mock_generate_llm_agent_step,
+    ) -> None:
+        mock_generate_llm_agent_step.side_effect = LLMClientError("llm disabled")
+        workspace_summary = WorkspaceSummary(
+            workspace_path="/tmp/project",
+            root_name="project",
+            backend_route_candidates=[
+                WorkspaceCandidate(path="backend/main.go", kind="go.gin.routes", reason="route")
+            ],
+            api_client_candidates=[
+                WorkspaceCandidate(path="frontend/src/api/users.ts", kind="frontend.api_client", reason="api")
+            ],
+        )
+
+        response = generate_agent_step(
+            AgentStepRequest(
+                goal="根据用户列表接口生成页面",
+                plan=["读取接口", "读取 API client"],
+                workspace_summary=workspace_summary,
+                step_index=2,
+                previous_observation=AgentObservation(
+                    status="ok",
+                    message="Read 100 bytes.",
+                    path="backend/main.go",
+                    content="router.GET('/users', listUsers)",
+                ),
+                read_files=[
+                    AgentReadFile(path="backend/main.go", content="router.GET('/users', listUsers)")
+                ],
+            )
+        )
+
+        self.assertEqual(response.stepper, "mock_stepper")
+        self.assertIn("agent.read_files", response.context_used)
+        self.assertEqual(response.action.type, "read_file")
+        self.assertEqual(response.action.path, "frontend/src/api/users.ts")
+
+        finish_response = generate_agent_step(
+            AgentStepRequest(
+                goal="根据用户列表接口生成页面",
+                plan=["读取接口", "读取 API client"],
+                workspace_summary=workspace_summary,
+                step_index=3,
+                previous_observation=AgentObservation(
+                    status="ok",
+                    message="Read 80 bytes.",
+                    path="frontend/src/api/users.ts",
+                    content="export function listUsers() {}",
+                ),
+                read_files=[
+                    AgentReadFile(path="backend/main.go", content="router.GET('/users', listUsers)"),
+                    AgentReadFile(path="frontend/src/api/users.ts", content="export function listUsers() {}"),
+                ],
+            )
+        )
+
+        self.assertEqual(finish_response.action.type, "finish")
+        self.assertIn("读取 2 个文件", finish_response.summary)
 
     def test_prompt_builder_contains_core_persona_fields(self) -> None:
         persona = default_berry_persona()

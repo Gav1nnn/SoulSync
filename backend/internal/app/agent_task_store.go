@@ -29,6 +29,7 @@ func (s *AgentTaskStore) Create(goal string, workspace *Workspace, now time.Time
 		Plan:               []string{},
 		FilesToRead:        []string{},
 		PlannerContextUsed: []string{},
+		Steps:              []AgentTaskStep{},
 		Logs:               []AgentTaskLog{},
 		ChangedFiles:       []string{},
 		CreatedAt:          now,
@@ -75,6 +76,7 @@ func cloneAgentTask(task AgentTask) AgentTask {
 	task.Plan = append([]string{}, task.Plan...)
 	task.FilesToRead = append([]string{}, task.FilesToRead...)
 	task.PlannerContextUsed = append([]string{}, task.PlannerContextUsed...)
+	task.Steps = cloneAgentTaskSteps(task.Steps)
 	task.Logs = append([]AgentTaskLog{}, task.Logs...)
 	task.ChangedFiles = append([]string{}, task.ChangedFiles...)
 	if task.Workspace != nil {
@@ -96,4 +98,17 @@ func cloneAgentTask(task AgentTask) AgentTask {
 	}
 
 	return task
+}
+
+func cloneAgentTaskSteps(steps []AgentTaskStep) []AgentTaskStep {
+	cloned := make([]AgentTaskStep, len(steps))
+	for index, step := range steps {
+		cloned[index] = step
+		cloned[index].Observation.Items = append([]string{}, step.Observation.Items...)
+		cloned[index].Observation.Matches = append([]string{}, step.Observation.Matches...)
+		cloned[index].Observation.Output = append([]string{}, step.Observation.Output...)
+		cloned[index].ContextUsed = append([]string{}, step.ContextUsed...)
+	}
+
+	return cloned
 }
