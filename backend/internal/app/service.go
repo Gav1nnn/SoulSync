@@ -300,6 +300,7 @@ func (s *Service) runAgentTask(taskID string) {
 		task.Verification = &verification
 	})
 	if verification.Status != "passed" && verification.Status != "skipped" {
+		s.setAgentTaskResult(taskID, AgentTaskFailed, "verification failed or unavailable")
 		s.failAgentTask(taskID, "verification failed or unavailable")
 		return
 	}
@@ -308,6 +309,7 @@ func (s *Service) runAgentTask(taskID string) {
 	s.agentTaskStore.Update(taskID, func(task *AgentTask) {
 		task.Status = AgentTaskCompleted
 		task.CompletedAt = &completedAt
+		task.Result = buildAgentTaskResult(*task, "")
 		task.Logs = append(task.Logs, AgentTaskLog{
 			At:      completedAt,
 			Status:  AgentTaskCompleted,
@@ -429,11 +431,21 @@ func (s *Service) failAgentTask(taskID string, message string) {
 		task.Status = AgentTaskFailed
 		task.Error = message
 		task.CompletedAt = &completedAt
+		if task.Result == nil {
+			task.Result = buildAgentTaskResult(*task, message)
+		}
 		task.Logs = append(task.Logs, AgentTaskLog{
 			At:      completedAt,
 			Status:  AgentTaskFailed,
 			Message: message,
 		})
+	})
+}
+
+func (s *Service) setAgentTaskResult(taskID string, status AgentTaskStatus, message string) {
+	s.agentTaskStore.Update(taskID, func(task *AgentTask) {
+		task.Status = status
+		task.Result = buildAgentTaskResult(*task, message)
 	})
 }
 

@@ -88,6 +88,11 @@ func cloneAgentTask(task AgentTask) AgentTask {
 		verification.Output = append([]string{}, task.Verification.Output...)
 		task.Verification = &verification
 	}
+	if task.Result != nil {
+		result := *task.Result
+		result.NextSuggestions = append([]string{}, task.Result.NextSuggestions...)
+		task.Result = &result
+	}
 	if task.InitialAction != nil {
 		initialAction := *task.InitialAction
 		task.InitialAction = &initialAction

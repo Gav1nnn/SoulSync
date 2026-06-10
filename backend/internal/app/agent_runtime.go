@@ -425,3 +425,118 @@ func commandOutputLines(output []byte) []string {
 
 	return lines
 }
+
+func buildAgentTaskResult(task AgentTask, failureMessage string) *AgentTaskResult {
+	if task.Status == AgentTaskFailed || strings.TrimSpace(failureMessage) != "" {
+		summary := strings.TrimSpace(failureMessage)
+		if summary == "" {
+			summary = "Agent task failed."
+		}
+		failureFile := detectFailureFile(task)
+		suggestions := []string{
+			"查看任务日志和最后一个失败 step 的 observation。",
+			"保留当前任务分支，修正失败原因后重新创建任务。",
+		}
+		if task.Verification != nil && task.Verification.Command != "" {
+			suggestions = append(suggestions, "在 workspace 中手动运行验证命令："+task.Verification.Command)
+		}
+		return &AgentTaskResult{
+			Summary:         summary,
+			FailureFile:     failureFile,
+			NextSuggestions: suggestions,
+		}
+	}
+
+	summaryParts := []string{}
+	if task.BranchName != "" {
+		summaryParts = append(summaryParts, "branch "+task.BranchName)
+	}
+	if len(task.ChangedFiles) > 0 {
+		summaryParts = append(summaryParts, fmt.Sprintf("%d changed files", len(task.ChangedFiles)))
+	} else {
+		summaryParts = append(summaryParts, "no file changes")
+	}
+	if task.Verification != nil {
+		summaryParts = append(summaryParts, "verification "+task.Verification.Status)
+	}
+
+	suggestions := []string{
+		"检查生成文件是否符合项目风格。",
+	}
+	if task.Verification != nil && task.Verification.Status == "passed" {
+		suggestions = append(suggestions, "验证通过后可以提交当前任务分支并发起合并。")
+	}
+	if len(task.ChangedFiles) > 0 {
+		suggestions = append(suggestions, "重点 review changed files 中的 API client、类型和页面。")
+	}
+
+	return &AgentTaskResult{
+		Summary:         strings.Join(summaryParts, ", "),
+		NextSuggestions: suggestions,
+	}
+}
+
+func detectFailureFile(task AgentTask) string {
+	if task.Verification != nil {
+		for _, line := range task.Verification.Output {
+			if file := firstPathLikeToken(line); file != "" {
+				return file
+			}
+		}
+	}
+
+	for index := len(task.Steps) - 1; index >= 0; index-- {
+		step := task.Steps[index]
+		if step.Observation.Status == "failed" || step.Observation.Status == "unsupported" {
+			if step.Observation.Path != "" {
+				return step.Observation.Path
+			}
+			if step.Action.Path != "" {
+				return step.Action.Path
+			}
+		}
+	}
+
+	return ""
+}
+
+func firstPathLikeToken(line string) string {
+	fields := strings.Fields(line)
+	for _, field := range fields {
+		cleaned := strings.Trim(field, "\"'`()[],:;")
+		cleaned = stripLineColumnSuffix(cleaned)
+		if strings.Contains(cleaned, "/") && hasCodeFileExtension(cleaned) {
+			return cleaned
+		}
+	}
+	return ""
+}
+
+func stripLineColumnSuffix(value string) string {
+	parts := strings.Split(value, ":")
+	for len(parts) > 1 && isDigits(parts[len(parts)-1]) {
+		parts = parts[:len(parts)-1]
+	}
+	return strings.Join(parts, ":")
+}
+
+func isDigits(value string) bool {
+	if value == "" {
+		return false
+	}
+	for _, char := range value {
+		if char < '0' || char > '9' {
+			return false
+		}
+	}
+	return true
+}
+
+func hasCodeFileExtension(path string) bool {
+	switch strings.ToLower(filepath.Ext(path)) {
+	case ".go", ".py", ".js", ".jsx", ".ts", ".tsx", ".vue", ".css", ".json":
+		return true
+	default:
+		return false
+	}
+}

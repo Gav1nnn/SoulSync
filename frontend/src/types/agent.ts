@@ -20,6 +20,12 @@ export type AgentVerification = {
   output: string[];
 };
 
+export type AgentTaskResult = {
+  summary: string;
+  failure_file?: string;
+  next_suggestions: string[];
+};
+
 export type AgentPlanAction = {
   type: string;
   path?: string;
@@ -67,6 +73,7 @@ export type AgentTask = {
   logs: AgentTaskLog[];
   changed_files: string[];
   verification?: AgentVerification;
+  result?: AgentTaskResult;
   error?: string;
   created_at: string;
   updated_at: string;

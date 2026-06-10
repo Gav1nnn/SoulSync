@@ -128,6 +128,19 @@ onBeforeUnmount(() => {
         <span v-if="isActiveTask">polling</span>
       </div>
 
+      <section class="task-section" v-if="task.result">
+        <p class="section-title">Result</p>
+        <div class="result-box" :class="{ failed: task.status === 'failed' }">
+          <p>{{ task.result.summary }}</p>
+          <code v-if="task.result.failure_file">{{ task.result.failure_file }}</code>
+          <ul>
+            <li v-for="suggestion in task.result.next_suggestions" :key="suggestion">
+              {{ suggestion }}
+            </li>
+          </ul>
+        </div>
+      </section>
+
       <section class="task-section">
         <p class="section-title">Plan</p>
         <ol class="plan-list">
@@ -489,6 +502,7 @@ h2 {
 }
 
 .verification-box,
+.result-box,
 .action-box {
   display: grid;
   gap: 5px;
@@ -504,6 +518,39 @@ h2 {
   font-size: 0.78rem;
   font-weight: 900;
   text-transform: uppercase;
+}
+
+.result-box {
+  border-color: rgba(93, 156, 123, 0.18);
+  background: rgba(235, 249, 240, 0.62);
+}
+
+.result-box.failed {
+  border-color: rgba(179, 61, 55, 0.2);
+  background: rgba(255, 236, 232, 0.66);
+}
+
+.result-box p,
+.result-box ul {
+  margin: 0;
+}
+
+.result-box p {
+  color: #294654;
+  font-weight: 800;
+}
+
+.result-box ul {
+  display: grid;
+  gap: 4px;
+  padding-left: 18px;
+  color: #60717a;
+}
+
+.result-box code {
+  color: #b33d37;
+  font-family: "Menlo", "Monaco", "Courier New", monospace;
+  overflow-wrap: anywhere;
 }
 
 .verification-box .verify-failed {

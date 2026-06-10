@@ -568,6 +568,9 @@ func TestCreateAgentTaskRunsPlannerLifecycle(t *testing.T) {
 	if task.Verification == nil || task.Verification.Status != "skipped" {
 		t.Fatalf("expected skipped verification: %#v", task.Verification)
 	}
+	if task.Result == nil || !strings.Contains(task.Result.Summary, "no file changes") {
+		t.Fatalf("expected read-only result summary: %#v", task.Result)
+	}
 	if len(task.ChangedFiles) != 0 {
 		t.Fatalf("expected no changed files in read-only stepper stage: %#v", task.ChangedFiles)
 	}
@@ -668,8 +671,39 @@ func TestCreateAgentTaskWritesGeneratedFrontendFiles(t *testing.T) {
 	if task.Verification == nil || task.Verification.Status != "passed" {
 		t.Fatalf("expected verification to pass: %#v", task.Verification)
 	}
+	if task.Result == nil || !strings.Contains(task.Result.Summary, "3 changed files") {
+		t.Fatalf("expected generated task result summary: %#v", task.Result)
+	}
+	if len(task.Result.NextSuggestions) == 0 {
+		t.Fatalf("expected next suggestions: %#v", task.Result)
+	}
 	if stepCalls != 4 {
 		t.Fatalf("expected four stepper calls, got %d", stepCalls)
+	}
+}
+
+func TestBuildAgentTaskResultExtractsFailureFile(t *testing.T) {
+	task := AgentTask{
+		Status: AgentTaskFailed,
+		Verification: &AgentVerification{
+			Status:  "failed",
+			Command: "cd frontend && npm run build",
+			Output: []string{
+				"frontend/src/views/SoulSyncUserView.vue:12:3 - error TS2304",
+			},
+		},
+	}
+
+	result := buildAgentTaskResult(task, "verification failed")
+
+	if result.Summary != "verification failed" {
+		t.Fatalf("unexpected result summary: %#v", result)
+	}
+	if result.FailureFile != "frontend/src/views/SoulSyncUserView.vue" {
+		t.Fatalf("expected failure file to be extracted: %#v", result)
+	}
+	if len(result.NextSuggestions) == 0 {
+		t.Fatalf("expected suggestions: %#v", result)
 	}
 }
 

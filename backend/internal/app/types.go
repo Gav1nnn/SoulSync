@@ -228,6 +228,7 @@ type AgentTask struct {
 	Logs               []AgentTaskLog     `json:"logs"`
 	ChangedFiles       []string           `json:"changed_files"`
 	Verification       *AgentVerification `json:"verification,omitempty"`
+	Result             *AgentTaskResult   `json:"result,omitempty"`
 	Error              string             `json:"error,omitempty"`
 	CreatedAt          time.Time          `json:"created_at"`
 	UpdatedAt          time.Time          `json:"updated_at"`
@@ -256,6 +257,12 @@ type AgentVerification struct {
 	Status  string   `json:"status"`
 	Command string   `json:"command"`
 	Output  []string `json:"output"`
+}
+
+type AgentTaskResult struct {
+	Summary         string   `json:"summary"`
+	FailureFile     string   `json:"failure_file,omitempty"`
+	NextSuggestions []string `json:"next_suggestions"`
 }
 
 type Memory struct {
