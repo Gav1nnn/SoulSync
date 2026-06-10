@@ -39,36 +39,53 @@ func NewAIClientWithHTTPClient(baseURL string, httpClient *http.Client) *AIClien
 }
 
 func (c *AIClient) Generate(ctx context.Context, request AIGenerateRequest) (AIGenerateResponse, error) {
-	payload, err := json.Marshal(request)
+	var result AIGenerateResponse
+	if err := c.postJSON(ctx, "/generate", request, &result); err != nil {
+		return AIGenerateResponse{}, err
+	}
+
+	return result, nil
+}
+
+func (c *AIClient) Plan(ctx context.Context, request AIAgentPlanRequest) (AIAgentPlanResponse, error) {
+	var result AIAgentPlanResponse
+	if err := c.postJSON(ctx, "/agent/plan", request, &result); err != nil {
+		return AIAgentPlanResponse{}, err
+	}
+
+	return result, nil
+}
+
+func (c *AIClient) postJSON(ctx context.Context, path string, requestPayload any, result any) error {
+	payload, err := json.Marshal(requestPayload)
 	if err != nil {
-		return AIGenerateResponse{}, fmt.Errorf("marshal ai request: %w", err)
+		return fmt.Errorf("marshal ai request: %w", err)
 	}
 
 	httpRequest, err := http.NewRequestWithContext(
 		ctx,
 		http.MethodPost,
-		c.baseURL+"/generate",
+		c.baseURL+path,
 		bytes.NewReader(payload),
 	)
 	if err != nil {
-		return AIGenerateResponse{}, fmt.Errorf("build ai request: %w", err)
+		return fmt.Errorf("build ai request: %w", err)
 	}
 	httpRequest.Header.Set("Content-Type", "application/json")
 
 	response, err := c.httpClient.Do(httpRequest)
 	if err != nil {
-		return AIGenerateResponse{}, fmt.Errorf("call ai engine: %w", err)
+		return fmt.Errorf("call ai engine: %w", err)
 	}
 	defer response.Body.Close()
 
 	if response.StatusCode != http.StatusOK {
-		return AIGenerateResponse{}, fmt.Errorf("ai engine returned status %d", response.StatusCode)
+		return fmt.Errorf("ai engine returned status %d", response.StatusCode)
 	}
 
-	var result AIGenerateResponse
-	if err := json.NewDecoder(response.Body).Decode(&result); err != nil {
-		return AIGenerateResponse{}, fmt.Errorf("decode ai response: %w", err)
+	if err := json.NewDecoder(response.Body).Decode(result); err != nil {
+		return fmt.Errorf("decode ai response: %w", err)
 	}
 
-	return result, nil
+	return nil
 }

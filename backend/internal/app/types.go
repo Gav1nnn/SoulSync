@@ -6,6 +6,14 @@ type ChatRequest struct {
 	Message string `json:"message"`
 }
 
+type WorkspaceRequest struct {
+	Path string `json:"path"`
+}
+
+type AgentTaskRequest struct {
+	Goal string `json:"goal"`
+}
+
 type ChatResponse struct {
 	Reply                string   `json:"reply"`
 	TraceID              string   `json:"trace_id"`
@@ -43,6 +51,34 @@ type AIGenerateResponse struct {
 	UsedKnowledgeChunkIDs []string          `json:"used_knowledge_chunk_ids"`
 	MemoryWritten         bool              `json:"memory_written"`
 	MemoryCandidates      []MemoryCandidate `json:"memory_candidates"`
+}
+
+type AIAgentPlanRequest struct {
+	Goal             string                `json:"goal"`
+	WorkspaceSummary WorkspaceSummary      `json:"workspace_summary"`
+	CharacterName    string                `json:"character_name"`
+	Persona          PersonaProfile        `json:"persona"`
+	Memories         []MemoryContext       `json:"memories"`
+	RecentMessages   []ConversationMessage `json:"recent_messages"`
+	ProjectContext   []string              `json:"project_context"`
+}
+
+type AIAgentPlanResponse struct {
+	Plan                  []string        `json:"plan"`
+	FilesToRead           []string        `json:"files_to_read"`
+	InitialAction         AgentPlanAction `json:"initial_action"`
+	ContextUsed           []string        `json:"context_used"`
+	UsedMemoryIDs         []string        `json:"used_memory_ids"`
+	UsedKnowledgeChunkIDs []string        `json:"used_knowledge_chunk_ids"`
+	Planner               string          `json:"planner"`
+}
+
+type AgentPlanAction struct {
+	Type    string `json:"type"`
+	Path    string `json:"path,omitempty"`
+	Query   string `json:"query,omitempty"`
+	Command string `json:"command,omitempty"`
+	Reason  string `json:"reason"`
 }
 
 type Trace struct {
@@ -83,6 +119,82 @@ type Message struct {
 	Role      string    `json:"role"`
 	Content   string    `json:"content"`
 	CreatedAt time.Time `json:"created_at"`
+}
+
+type Workspace struct {
+	Path      string    `json:"path"`
+	Branch    string    `json:"branch"`
+	Dirty     bool      `json:"dirty"`
+	UpdatedAt time.Time `json:"updated_at"`
+}
+
+type WorkspaceSummary struct {
+	WorkspacePath           string               `json:"workspace_path"`
+	RootName                string               `json:"root_name"`
+	Tree                    []WorkspaceTreeItem  `json:"tree"`
+	PackageManagers         []string             `json:"package_managers"`
+	FrontendFrameworks      []string             `json:"frontend_frameworks"`
+	BackendFrameworks       []string             `json:"backend_frameworks"`
+	BackendRouteCandidates  []WorkspaceCandidate `json:"backend_route_candidates"`
+	TypeFileCandidates      []WorkspaceCandidate `json:"type_file_candidates"`
+	FrontendEntryCandidates []WorkspaceCandidate `json:"frontend_entry_candidates"`
+	APIClientCandidates     []WorkspaceCandidate `json:"api_client_candidates"`
+	ValidationCommands      []string             `json:"validation_commands"`
+	GeneratedAt             time.Time            `json:"generated_at"`
+}
+
+type WorkspaceTreeItem struct {
+	Path string `json:"path"`
+	Type string `json:"type"`
+}
+
+type WorkspaceCandidate struct {
+	Path   string `json:"path"`
+	Kind   string `json:"kind"`
+	Reason string `json:"reason"`
+}
+
+type AgentTaskStatus string
+
+const (
+	AgentTaskQueued    AgentTaskStatus = "queued"
+	AgentTaskPlanning  AgentTaskStatus = "planning"
+	AgentTaskRunning   AgentTaskStatus = "running"
+	AgentTaskVerifying AgentTaskStatus = "verifying"
+	AgentTaskCompleted AgentTaskStatus = "completed"
+	AgentTaskFailed    AgentTaskStatus = "failed"
+)
+
+type AgentTask struct {
+	ID                 string             `json:"id"`
+	Goal               string             `json:"goal"`
+	Status             AgentTaskStatus    `json:"status"`
+	Workspace          *Workspace         `json:"workspace,omitempty"`
+	BranchName         string             `json:"branch_name,omitempty"`
+	Plan               []string           `json:"plan"`
+	FilesToRead        []string           `json:"files_to_read"`
+	InitialAction      *AgentPlanAction   `json:"initial_action,omitempty"`
+	Planner            string             `json:"planner,omitempty"`
+	PlannerContextUsed []string           `json:"planner_context_used"`
+	Logs               []AgentTaskLog     `json:"logs"`
+	ChangedFiles       []string           `json:"changed_files"`
+	Verification       *AgentVerification `json:"verification,omitempty"`
+	Error              string             `json:"error,omitempty"`
+	CreatedAt          time.Time          `json:"created_at"`
+	UpdatedAt          time.Time          `json:"updated_at"`
+	CompletedAt        *time.Time         `json:"completed_at,omitempty"`
+}
+
+type AgentTaskLog struct {
+	At      time.Time       `json:"at"`
+	Status  AgentTaskStatus `json:"status"`
+	Message string          `json:"message"`
+}
+
+type AgentVerification struct {
+	Status  string   `json:"status"`
+	Command string   `json:"command"`
+	Output  []string `json:"output"`
 }
 
 type Memory struct {

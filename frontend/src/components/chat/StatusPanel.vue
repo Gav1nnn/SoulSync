@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from "vue";
-import type { ChatErrorCode, ChatStatus } from "../../types/chat";
+import type { ChatErrorCode, ChatStatus, Trace } from "../../types/chat";
 
 const props = defineProps<{
   status: ChatStatus;
@@ -9,6 +9,7 @@ const props = defineProps<{
   usedMemoryIds: string[];
   memoryWritten: boolean;
   memoryCandidateCount: number;
+  trace: Trace | null;
   errorMessage: string;
   errorCode: ChatErrorCode | null;
 }>();
@@ -22,15 +23,56 @@ const statusLabels: Record<ChatStatus, string> = {
 
 const statusTone = computed(() => `tone-${props.status}`);
 
+const effectiveContextUsed = computed(() => props.trace?.context_used ?? props.contextUsed);
+const effectiveUsedMemoryIds = computed(() => props.trace?.used_memory_ids ?? props.usedMemoryIds);
+const effectiveMemoryWritten = computed(() => props.trace?.memory_written ?? props.memoryWritten);
+const effectiveMemoryCandidateCount = computed(
+  () => props.trace?.memory_candidate_count ?? props.memoryCandidateCount,
+);
+const effectiveTraceId = computed(() => props.trace?.trace_id ?? props.traceId);
+const usedKnowledgeChunkIds = computed(() => props.trace?.used_knowledge_chunk_ids ?? []);
+
 const contextGroups = computed(() => {
-  const known = new Set(props.contextUsed);
+  const known = new Set(effectiveContextUsed.value);
   return [
     { label: "Persona", active: known.has("persona") },
     { label: "RAG", active: known.has("knowledge") },
     { label: "Memory", active: known.has("memory") },
-    { label: "Trace", active: Boolean(props.traceId) },
+    { label: "Trace", active: Boolean(effectiveTraceId.value) },
   ];
 });
+
+const traceDuration = computed(() => {
+  if (!props.trace) {
+    return "waiting";
+  }
+  return `${props.trace.duration_ms} ms`;
+});
+
+const traceWindow = computed(() => {
+  if (!props.trace) {
+    return "waiting";
+  }
+
+  return `${formatTraceTime(props.trace.started_at)} -> ${formatTraceTime(props.trace.finished_at)}`;
+});
+
+function formatTraceTime(value: string) {
+  if (!value) {
+    return "unknown";
+  }
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return value;
+  }
+
+  return date.toLocaleTimeString([], {
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  });
+}
 </script>
 
 <template>
@@ -76,14 +118,15 @@ const contextGroups = computed(() => {
 
     <section class="status-card">
       <p class="label">Trace</p>
-      <p class="value code">{{ traceId || "waiting" }}</p>
-      <p class="detail">最近一次请求 ID，用来定位后端日志和上下文使用情况。</p>
+      <p class="value code">{{ effectiveTraceId || "waiting" }}</p>
+      <p class="detail">Duration: {{ traceDuration }}</p>
+      <p class="detail code">{{ traceWindow }}</p>
     </section>
 
     <section class="status-card">
       <p class="label">Context Used</p>
-      <div class="tag-list" v-if="contextUsed.length">
-        <span v-for="item in contextUsed" :key="item">{{ item }}</span>
+      <div class="tag-list" v-if="effectiveContextUsed.length">
+        <span v-for="item in effectiveContextUsed" :key="item">{{ item }}</span>
       </div>
       <p v-else class="value code">waiting</p>
       <p class="detail">确认本轮是否走到 persona、knowledge、memory 或 fallback。</p>
@@ -91,11 +134,23 @@ const contextGroups = computed(() => {
 
     <section class="status-card">
       <p class="label">Memory</p>
-      <p class="value code">{{ memoryWritten ? "written" : "not written" }} / candidates {{ memoryCandidateCount }}</p>
+      <p class="value code">
+        {{ effectiveMemoryWritten ? "written" : "not written" }} / candidates
+        {{ effectiveMemoryCandidateCount }}
+      </p>
       <p class="detail">
         Used:
-        {{ usedMemoryIds.length ? usedMemoryIds.join(", ") : "none" }}
+        {{ effectiveUsedMemoryIds.length ? effectiveUsedMemoryIds.join(", ") : "none" }}
       </p>
+    </section>
+
+    <section class="status-card">
+      <p class="label">Knowledge</p>
+      <div class="tag-list" v-if="usedKnowledgeChunkIds.length">
+        <span v-for="item in usedKnowledgeChunkIds" :key="item">{{ item }}</span>
+      </div>
+      <p v-else class="value code">none</p>
+      <p class="detail">本轮 RAG 命中的知识 chunk id，用来回查 docs 上下文。</p>
     </section>
 
     <section class="status-card">

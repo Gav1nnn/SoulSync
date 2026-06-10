@@ -1,11 +1,13 @@
 <script setup lang="ts">
-import { ref } from "vue";
-import { ChatApiError, sendChatMessage } from "../api/chat";
+import { onMounted, ref } from "vue";
+import { ChatApiError, fetchRecentMessages, fetchTrace, sendChatMessage } from "../api/chat";
+import AgentTaskPanel from "../components/agent/AgentTaskPanel.vue";
 import ChatHeader from "../components/chat/ChatHeader.vue";
 import MessageComposer from "../components/chat/MessageComposer.vue";
 import MessageList from "../components/chat/MessageList.vue";
 import StatusPanel from "../components/chat/StatusPanel.vue";
-import type { ChatErrorCode, ChatMessage, ChatStatus } from "../types/chat";
+import WorkspaceConnector from "../components/workspace/WorkspaceConnector.vue";
+import type { ChatErrorCode, ChatMessage, ChatStatus, Trace } from "../types/chat";
 
 const quickPrompts = [
   "你好，我叫 Gavin",
@@ -22,10 +24,56 @@ const contextUsed = ref<string[]>([]);
 const usedMemoryIds = ref<string[]>([]);
 const memoryWritten = ref(false);
 const memoryCandidateCount = ref(0);
+const trace = ref<Trace | null>(null);
 const messages = ref<ChatMessage[]>([]);
 
 function fillDraft(prompt: string) {
   draft.value = prompt;
+}
+
+async function loadTrace(nextTraceId: string) {
+  if (!nextTraceId) {
+    return;
+  }
+
+  const response = await fetchTrace(nextTraceId);
+  trace.value = response.trace;
+  traceId.value = response.trace.trace_id;
+  contextUsed.value = response.trace.context_used;
+  usedMemoryIds.value = response.trace.used_memory_ids;
+  memoryWritten.value = response.trace.memory_written;
+  memoryCandidateCount.value = response.trace.memory_candidate_count;
+}
+
+async function restoreRecentMessages() {
+  try {
+    const response = await fetchRecentMessages(50);
+    messages.value = response.messages;
+
+    const latestTraceId = [...response.messages]
+      .reverse()
+      .find((message) => message.trace_id)?.trace_id;
+    if (latestTraceId) {
+      traceId.value = latestTraceId;
+      try {
+        await loadTrace(latestTraceId);
+        status.value = "success";
+      } catch {
+        status.value = "idle";
+      }
+    }
+  } catch (error) {
+    status.value = "error";
+
+    if (error instanceof ChatApiError) {
+      errorMessage.value = error.message;
+      errorCode.value = error.code;
+      return;
+    }
+
+    errorMessage.value = "最近消息恢复失败，请稍后重试。";
+    errorCode.value = "unknown";
+  }
 }
 
 async function sendMessage() {
@@ -53,11 +101,14 @@ async function sendMessage() {
     usedMemoryIds.value = response.used_memory_ids;
     memoryWritten.value = response.memory_written;
     memoryCandidateCount.value = response.memory_candidate_count;
+    trace.value = null;
     messages.value.push({
       id: response.trace_id,
+      trace_id: response.trace_id,
       role: "assistant",
       content: response.reply,
     });
+    await loadTrace(response.trace_id);
     status.value = "success";
   } catch (error) {
     status.value = "error";
@@ -72,6 +123,10 @@ async function sendMessage() {
     errorCode.value = "unknown";
   }
 }
+
+onMounted(() => {
+  void restoreRecentMessages();
+});
 </script>
 
 <template>
@@ -84,6 +139,9 @@ async function sendMessage() {
 
       <div class="workspace">
         <section class="main-column">
+          <WorkspaceConnector />
+          <AgentTaskPanel />
+
           <section class="quick-prompts" aria-label="quick prompts">
             <button
               v-for="prompt in quickPrompts"
@@ -111,6 +169,7 @@ async function sendMessage() {
           :used-memory-ids="usedMemoryIds"
           :memory-written="memoryWritten"
           :memory-candidate-count="memoryCandidateCount"
+          :trace="trace"
           :error-message="errorMessage"
           :error-code="errorCode"
         />
