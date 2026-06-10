@@ -25,6 +25,7 @@ export type AgentTask = {
   goal: string;
   status: AgentTaskStatus;
   workspace?: Workspace;
+  branch_name?: string;
   plan: string[];
   logs: AgentTaskLog[];
   changed_files: string[];

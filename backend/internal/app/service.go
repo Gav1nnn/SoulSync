@@ -241,28 +241,44 @@ func (s *Service) runMockAgentTask(taskID string) {
 		})
 	})
 
-	s.transitionAgentTask(taskID, AgentTaskRunning, "Mock runner recorded candidate files. No files were changed in this stage.")
+	branchName := agentTaskBranchName(time.Now())
+	if err := createAgentTaskBranch(task.Workspace.Path, branchName); err != nil {
+		s.failAgentTask(taskID, fmt.Sprintf("create task branch failed: %v", err))
+		return
+	}
 	s.agentTaskStore.Update(taskID, func(task *AgentTask) {
-		task.ChangedFiles = []string{}
+		task.BranchName = branchName
 		task.Logs = append(task.Logs, AgentTaskLog{
 			At:      time.Now(),
-			Status:  AgentTaskRunning,
-			Message: "Write execution is disabled until safe execution is implemented.",
+			Status:  AgentTaskPlanning,
+			Message: "Created isolated branch: " + branchName,
 		})
 	})
 
-	s.transitionAgentTask(taskID, AgentTaskVerifying, "Mock verification selected the first discovered validation command.")
-	command := "not detected"
-	if len(summary.ValidationCommands) > 0 {
-		command = summary.ValidationCommands[0]
+	s.transitionAgentTask(taskID, AgentTaskRunning, "Mock runner is writing a bounded test file inside the workspace.")
+	changedFile, err := writeAgentTaskTestFile(task.Workspace.Path, taskID, task.Goal)
+	if err != nil {
+		s.failAgentTask(taskID, fmt.Sprintf("write mock task file failed: %v", err))
+		return
 	}
 	s.agentTaskStore.Update(taskID, func(task *AgentTask) {
-		task.Verification = &AgentVerification{
-			Status:  "skipped",
-			Command: command,
-			Output:  []string{"Mock verification only. Command execution arrives in the safe execution stage."},
-		}
+		task.ChangedFiles = []string{changedFile}
+		task.Logs = append(task.Logs, AgentTaskLog{
+			At:      time.Now(),
+			Status:  AgentTaskRunning,
+			Message: "Changed file: " + changedFile,
+		})
 	})
+
+	s.transitionAgentTask(taskID, AgentTaskVerifying, "Running whitelisted verification command.")
+	verification := runWhitelistedValidationCommand(task.Workspace.Path, summary.ValidationCommands)
+	s.agentTaskStore.Update(taskID, func(task *AgentTask) {
+		task.Verification = &verification
+	})
+	if verification.Status != "passed" {
+		s.failAgentTask(taskID, "verification failed or unavailable")
+		return
+	}
 
 	completedAt := time.Now()
 	s.agentTaskStore.Update(taskID, func(task *AgentTask) {
@@ -315,9 +331,188 @@ func mockAgentPlan(goal string, summary WorkspaceSummary) []string {
 	if len(summary.APIClientCandidates) > 0 {
 		steps = append(steps, "复用 API client 候选："+summary.APIClientCandidates[0].Path)
 	}
-	steps = append(steps, "本阶段不写文件，等待安全执行层接入。")
+	steps = append(steps, "创建独立分支，写入 mock 测试文件，并运行白名单验证命令。")
 
 	return steps
+}
+
+func agentTaskBranchName(now time.Time) string {
+	return "agent/frontend-from-api-" + now.Format("20060102-150405")
+}
+
+func createAgentTaskBranch(workspaceRoot string, branchName string) error {
+	if strings.TrimSpace(branchName) == "" || strings.Contains(branchName, "..") {
+		return fmt.Errorf("invalid branch name")
+	}
+	if _, err := runGit(workspaceRoot, "checkout", "-b", branchName); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func writeAgentTaskTestFile(workspaceRoot string, taskID string, goal string) (string, error) {
+	relPath := filepath.ToSlash(filepath.Join(".soulsync", taskID+".md"))
+	absPath, err := safeWorkspacePath(workspaceRoot, relPath)
+	if err != nil {
+		return "", err
+	}
+	if err := os.MkdirAll(filepath.Dir(absPath), 0o755); err != nil {
+		return "", fmt.Errorf("create task directory: %w", err)
+	}
+
+	content := strings.Join([]string{
+		"# SoulSync Mock Agent Task",
+		"",
+		"Task ID: " + taskID,
+		"Goal: " + goal,
+		"",
+		"This file is written by the safe execution mock runtime.",
+		"It proves workspace-bounded writes before real Agent actions are enabled.",
+		"",
+	}, "\n")
+	if err := os.WriteFile(absPath, []byte(content), 0o644); err != nil {
+		return "", fmt.Errorf("write task file: %w", err)
+	}
+
+	return relPath, nil
+}
+
+func safeWorkspacePath(workspaceRoot string, relPath string) (string, error) {
+	if filepath.IsAbs(relPath) {
+		return "", fmt.Errorf("path must be relative")
+	}
+
+	root := filepath.Clean(workspaceRoot)
+	absPath := filepath.Clean(filepath.Join(root, filepath.FromSlash(relPath)))
+	relative, err := filepath.Rel(root, absPath)
+	if err != nil {
+		return "", fmt.Errorf("check workspace path: %w", err)
+	}
+	if relative == "." || strings.HasPrefix(relative, ".."+string(filepath.Separator)) || relative == ".." {
+		return "", fmt.Errorf("path escapes workspace")
+	}
+
+	return absPath, nil
+}
+
+func runWhitelistedValidationCommand(workspaceRoot string, commands []string) AgentVerification {
+	if len(commands) == 0 {
+		return AgentVerification{
+			Status:  "failed",
+			Command: "not detected",
+			Output:  []string{"No validation command was discovered for this workspace."},
+		}
+	}
+
+	for _, command := range commands {
+		result := runValidationCommand(workspaceRoot, command)
+		if result.Status != "unsupported" {
+			return result
+		}
+	}
+
+	return AgentVerification{
+		Status:  "failed",
+		Command: commands[0],
+		Output:  []string{"No discovered validation command is supported by the safe executor."},
+	}
+}
+
+func runValidationCommand(workspaceRoot string, command string) AgentVerification {
+	workdir := workspaceRoot
+	commandText := strings.TrimSpace(command)
+	if commandText == "" {
+		return AgentVerification{Status: "unsupported", Command: command, Output: []string{"Empty command."}}
+	}
+
+	if strings.Contains(commandText, "&&") {
+		parts := strings.Split(commandText, "&&")
+		if len(parts) != 2 {
+			return AgentVerification{Status: "unsupported", Command: command, Output: []string{"Only one cd prefix is supported."}}
+		}
+
+		cdPart := strings.TrimSpace(parts[0])
+		if !strings.HasPrefix(cdPart, "cd ") {
+			return AgentVerification{Status: "unsupported", Command: command, Output: []string{"Only cd prefixes are supported."}}
+		}
+
+		nextWorkdir, err := safeWorkspacePath(workspaceRoot, strings.TrimSpace(strings.TrimPrefix(cdPart, "cd ")))
+		if err != nil {
+			return AgentVerification{Status: "failed", Command: command, Output: []string{err.Error()}}
+		}
+		workdir = nextWorkdir
+		commandText = strings.TrimSpace(parts[1])
+	}
+
+	name, args, ok := parseValidationCommand(commandText)
+	if !ok {
+		return AgentVerification{Status: "unsupported", Command: command, Output: []string{"Command is not in the safe executor allowlist."}}
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+
+	execCommand := exec.CommandContext(ctx, name, args...)
+	execCommand.Dir = workdir
+	output, err := execCommand.CombinedOutput()
+	outputLines := commandOutputLines(output)
+	if ctx.Err() == context.DeadlineExceeded {
+		outputLines = append(outputLines, "Command timed out after 60 seconds.")
+		return AgentVerification{Status: "failed", Command: command, Output: outputLines}
+	}
+	if err != nil {
+		outputLines = append(outputLines, err.Error())
+		return AgentVerification{Status: "failed", Command: command, Output: outputLines}
+	}
+
+	if len(outputLines) == 0 {
+		outputLines = []string{"Command completed successfully."}
+	}
+	return AgentVerification{Status: "passed", Command: command, Output: outputLines}
+}
+
+func parseValidationCommand(command string) (string, []string, bool) {
+	fields := splitCommandFields(command)
+	if len(fields) == 0 {
+		return "", nil, false
+	}
+
+	switch {
+	case len(fields) == 3 && fields[0] == "npm" && fields[1] == "run":
+		return "npm", fields[1:], true
+	case len(fields) == 3 && fields[0] == "go" && fields[1] == "test" && fields[2] == "./...":
+		return "go", fields[1:], true
+	case len(fields) >= 3 && fields[0] == "uv" && fields[1] == "run" && fields[2] == "python":
+		return "uv", fields[1:], true
+	case len(fields) >= 3 && fields[0] == "python" && fields[1] == "-m" && fields[2] == "unittest":
+		return "python", fields[1:], true
+	default:
+		return "", nil, false
+	}
+}
+
+func splitCommandFields(command string) []string {
+	rawFields := strings.Fields(command)
+	fields := make([]string, 0, len(rawFields))
+	for _, field := range rawFields {
+		fields = append(fields, strings.Trim(field, `"'`))
+	}
+	return fields
+}
+
+func commandOutputLines(output []byte) []string {
+	text := strings.TrimSpace(string(output))
+	if text == "" {
+		return []string{}
+	}
+
+	lines := strings.Split(text, "\n")
+	if len(lines) > 40 {
+		lines = append(lines[:40], "... output truncated ...")
+	}
+
+	return lines
 }
 
 func readWorkspace(rawPath string) (Workspace, error) {

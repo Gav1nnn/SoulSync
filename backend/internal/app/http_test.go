@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -476,17 +477,46 @@ func TestCreateAgentTaskRunsMockLifecycle(t *testing.T) {
 	}
 
 	task := waitForAgentTaskStatus(t, server, response.Task.ID, AgentTaskCompleted)
+	if task.BranchName == "" {
+		t.Fatalf("expected branch name to be populated: %#v", task)
+	}
 	if len(task.Plan) == 0 {
 		t.Fatalf("expected plan to be populated: %#v", task)
 	}
 	if len(task.Logs) < 4 {
 		t.Fatalf("expected lifecycle logs: %#v", task.Logs)
 	}
-	if task.Verification == nil || task.Verification.Status != "skipped" {
+	if task.Verification == nil || task.Verification.Status != "passed" {
 		t.Fatalf("expected skipped verification: %#v", task.Verification)
 	}
-	if len(task.ChangedFiles) != 0 {
-		t.Fatalf("expected no changed files in mock stage: %#v", task.ChangedFiles)
+	if len(task.ChangedFiles) != 1 {
+		t.Fatalf("expected one changed file in safe execution stage: %#v", task.ChangedFiles)
+	}
+	if task.ChangedFiles[0] != ".soulsync/"+task.ID+".md" {
+		t.Fatalf("unexpected changed file: %#v", task.ChangedFiles)
+	}
+	if _, err := os.Stat(filepath.Join(workspacePath, filepath.FromSlash(task.ChangedFiles[0]))); err != nil {
+		t.Fatalf("expected changed file to exist: %v", err)
+	}
+	currentBranch := strings.TrimSpace(runTestGitOutput(t, workspacePath, "branch", "--show-current"))
+	if currentBranch != task.BranchName {
+		t.Fatalf("expected task branch %q, got %q", task.BranchName, currentBranch)
+	}
+}
+
+func TestSafeWorkspacePathRejectsEscapes(t *testing.T) {
+	root := t.TempDir()
+
+	if _, err := safeWorkspacePath(root, "../outside.txt"); err == nil {
+		t.Fatal("expected escaping path to be rejected")
+	}
+
+	inside, err := safeWorkspacePath(root, ".soulsync/task.md")
+	if err != nil {
+		t.Fatalf("expected inside path to be allowed: %v", err)
+	}
+	if !strings.HasPrefix(inside, root) {
+		t.Fatalf("expected path inside root, got %q", inside)
 	}
 }
 
@@ -613,7 +643,7 @@ func newFrontendBackendFixture(t *testing.T) string {
 	t.Helper()
 
 	dir := newGitFixture(t)
-	writeFixtureFile(t, dir, "frontend/package.json", `{"scripts":{"build":"vite build","test":"vitest"},"dependencies":{"vue":"^3.5.0"},"devDependencies":{"vite":"^6.0.0"}}`)
+	writeFixtureFile(t, dir, "frontend/package.json", `{"scripts":{"build":"node -e \"console.log('fixture build ok')\"","test":"node -e \"console.log('fixture test ok')\""},"dependencies":{"vue":"^3.5.0"},"devDependencies":{"vite":"^6.0.0"}}`)
 	writeFixtureFile(t, dir, "frontend/package-lock.json", `{"name":"fixture"}`)
 	writeFixtureFile(t, dir, "frontend/src/views/UserListView.vue", `<template><main>User list</main></template>`)
 	writeFixtureFile(t, dir, "frontend/src/api/users.ts", `export async function listUsers(){ return fetch("/api/users") }`)
@@ -672,6 +702,19 @@ func runTestGit(t *testing.T, dir string, args ...string) {
 	if err != nil {
 		t.Fatalf("git %v failed: %v\n%s", args, err, string(output))
 	}
+}
+
+func runTestGitOutput(t *testing.T, dir string, args ...string) string {
+	t.Helper()
+
+	command := exec.Command("git", args...)
+	command.Dir = dir
+	output, err := command.CombinedOutput()
+	if err != nil {
+		t.Fatalf("git %v failed: %v\n%s", args, err, string(output))
+	}
+
+	return string(output)
 }
 
 type roundTripFunc func(*http.Request) (*http.Response, error)

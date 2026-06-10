@@ -122,6 +122,7 @@ onBeforeUnmount(() => {
     <template v-if="task">
       <div class="task-meta">
         <code>{{ task.id }}</code>
+        <code v-if="task.branch_name">{{ task.branch_name }}</code>
         <span>{{ formatTime(task.updated_at) }}</span>
         <span v-if="isActiveTask">polling</span>
       </div>
@@ -146,9 +147,19 @@ onBeforeUnmount(() => {
       </section>
 
       <section class="task-section">
+        <p class="section-title">Changed Files</p>
+        <ul class="file-list">
+          <li v-for="file in task.changed_files" :key="file">
+            <code>{{ file }}</code>
+          </li>
+          <li v-if="!task.changed_files.length" class="muted-row">等待写入阶段。</li>
+        </ul>
+      </section>
+
+      <section class="task-section">
         <p class="section-title">Verification</p>
         <div v-if="task.verification" class="verification-box">
-          <span>{{ task.verification.status }}</span>
+          <span :class="`verify-${task.verification.status}`">{{ task.verification.status }}</span>
           <code>{{ task.verification.command }}</code>
           <p v-for="line in task.verification.output" :key="line">{{ line }}</p>
         </div>
@@ -308,7 +319,8 @@ h2 {
 }
 
 .plan-list,
-.log-list {
+.log-list,
+.file-list {
   display: grid;
   gap: 7px;
   margin: 0;
@@ -317,15 +329,30 @@ h2 {
 
 .plan-list li,
 .log-list li,
+.file-list li,
 .verification-box {
   color: #294654;
   line-height: 1.45;
   font-size: 0.88rem;
 }
 
-.log-list {
+.log-list,
+.file-list {
   padding-left: 0;
   list-style: none;
+}
+
+.file-list li {
+  padding: 8px;
+  border: 1px solid rgba(43, 76, 88, 0.08);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.42);
+}
+
+.file-list code {
+  color: #294654;
+  font-family: "Menlo", "Monaco", "Courier New", monospace;
+  overflow-wrap: anywhere;
 }
 
 .log-list li {
@@ -363,6 +390,14 @@ h2 {
   font-size: 0.78rem;
   font-weight: 900;
   text-transform: uppercase;
+}
+
+.verification-box .verify-failed {
+  color: #b33d37;
+}
+
+.verification-box .verify-skipped {
+  color: #9a5140;
 }
 
 .verification-box p {

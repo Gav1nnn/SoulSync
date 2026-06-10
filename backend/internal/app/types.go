@@ -142,6 +142,7 @@ type AgentTask struct {
 	Goal         string             `json:"goal"`
 	Status       AgentTaskStatus    `json:"status"`
 	Workspace    *Workspace         `json:"workspace,omitempty"`
+	BranchName   string             `json:"branch_name,omitempty"`
 	Plan         []string           `json:"plan"`
 	Logs         []AgentTaskLog     `json:"logs"`
 	ChangedFiles []string           `json:"changed_files"`
