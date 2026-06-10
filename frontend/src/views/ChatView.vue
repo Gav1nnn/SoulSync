@@ -5,6 +5,7 @@ import ChatHeader from "../components/chat/ChatHeader.vue";
 import MessageComposer from "../components/chat/MessageComposer.vue";
 import MessageList from "../components/chat/MessageList.vue";
 import StatusPanel from "../components/chat/StatusPanel.vue";
+import WorkspaceConnector from "../components/workspace/WorkspaceConnector.vue";
 import type { ChatErrorCode, ChatMessage, ChatStatus, Trace } from "../types/chat";
 
 const quickPrompts = [
@@ -137,6 +138,8 @@ onMounted(() => {
 
       <div class="workspace">
         <section class="main-column">
+          <WorkspaceConnector />
+
           <section class="quick-prompts" aria-label="quick prompts">
             <button
               v-for="prompt in quickPrompts"

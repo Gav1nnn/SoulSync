@@ -6,6 +6,10 @@ type ChatRequest struct {
 	Message string `json:"message"`
 }
 
+type WorkspaceRequest struct {
+	Path string `json:"path"`
+}
+
 type ChatResponse struct {
 	Reply                string   `json:"reply"`
 	TraceID              string   `json:"trace_id"`
@@ -83,6 +87,13 @@ type Message struct {
 	Role      string    `json:"role"`
 	Content   string    `json:"content"`
 	CreatedAt time.Time `json:"created_at"`
+}
+
+type Workspace struct {
+	Path      string    `json:"path"`
+	Branch    string    `json:"branch"`
+	Dirty     bool      `json:"dirty"`
+	UpdatedAt time.Time `json:"updated_at"`
 }
 
 type Memory struct {

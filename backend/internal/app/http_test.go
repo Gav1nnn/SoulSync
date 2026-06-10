@@ -6,6 +6,9 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"os/exec"
+	"path/filepath"
 	"testing"
 )
 
@@ -259,6 +262,93 @@ func TestMessagesEndpointReturnsRecentMessages(t *testing.T) {
 	}
 }
 
+func TestConnectWorkspaceSavesGitRepositoryStatus(t *testing.T) {
+	server := NewHTTPServer(newTestService(t, NewAIClient("http://127.0.0.1:1"))).Router()
+	workspacePath := newGitFixture(t)
+
+	body := bytes.NewBufferString(`{"path":"` + workspacePath + `"}`)
+	request := httptest.NewRequest(http.MethodPost, "/api/workspaces", body)
+	request.Header.Set("Content-Type", "application/json")
+	recorder := httptest.NewRecorder()
+
+	server.ServeHTTP(recorder, request)
+
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d: %s", recorder.Code, recorder.Body.String())
+	}
+
+	var response struct {
+		Workspace Workspace `json:"workspace"`
+	}
+	if err := json.Unmarshal(recorder.Body.Bytes(), &response); err != nil {
+		t.Fatalf("decode workspace response: %v", err)
+	}
+
+	if response.Workspace.Path != workspacePath {
+		t.Fatalf("unexpected workspace path: %#v", response.Workspace)
+	}
+	if response.Workspace.Branch == "" {
+		t.Fatalf("expected branch to be populated: %#v", response.Workspace)
+	}
+	if response.Workspace.Dirty {
+		t.Fatalf("expected clean fixture: %#v", response.Workspace)
+	}
+}
+
+func TestCurrentWorkspaceRefreshesDirtyStatus(t *testing.T) {
+	server := NewHTTPServer(newTestService(t, NewAIClient("http://127.0.0.1:1"))).Router()
+	workspacePath := newGitFixture(t)
+
+	connectBody := bytes.NewBufferString(`{"path":"` + workspacePath + `"}`)
+	connectRequest := httptest.NewRequest(http.MethodPost, "/api/workspaces", connectBody)
+	connectRequest.Header.Set("Content-Type", "application/json")
+	connectRecorder := httptest.NewRecorder()
+	server.ServeHTTP(connectRecorder, connectRequest)
+	if connectRecorder.Code != http.StatusOK {
+		t.Fatalf("expected connect status 200, got %d: %s", connectRecorder.Code, connectRecorder.Body.String())
+	}
+
+	if err := os.WriteFile(filepath.Join(workspacePath, "dirty.txt"), []byte("changed"), 0o644); err != nil {
+		t.Fatalf("write dirty file: %v", err)
+	}
+
+	request := httptest.NewRequest(http.MethodGet, "/api/workspaces/current", nil)
+	recorder := httptest.NewRecorder()
+	server.ServeHTTP(recorder, request)
+
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d: %s", recorder.Code, recorder.Body.String())
+	}
+
+	var response struct {
+		Workspace Workspace `json:"workspace"`
+	}
+	if err := json.Unmarshal(recorder.Body.Bytes(), &response); err != nil {
+		t.Fatalf("decode workspace response: %v", err)
+	}
+
+	if !response.Workspace.Dirty {
+		t.Fatalf("expected dirty workspace: %#v", response.Workspace)
+	}
+}
+
+func TestConnectWorkspaceRejectsRelativePath(t *testing.T) {
+	server := NewHTTPServer(newTestService(t, NewAIClient("http://127.0.0.1:1"))).Router()
+	body := bytes.NewBufferString(`{"path":"relative-project"}`)
+	request := httptest.NewRequest(http.MethodPost, "/api/workspaces", body)
+	request.Header.Set("Content-Type", "application/json")
+	recorder := httptest.NewRecorder()
+
+	server.ServeHTTP(recorder, request)
+
+	if recorder.Code != http.StatusBadRequest {
+		t.Fatalf("expected status 400, got %d", recorder.Code)
+	}
+	if !bytes.Contains(recorder.Body.Bytes(), []byte("path must be absolute")) {
+		t.Fatalf("expected absolute path error, got %s", recorder.Body.String())
+	}
+}
+
 func TestChatSendsRecentMessagesToAIEngine(t *testing.T) {
 	callCount := 0
 	aiClient := NewAIClientWithHTTPClient("http://ai-engine.local", &http.Client{
@@ -321,7 +411,41 @@ func newTestService(t *testing.T, aiClient *AIClient) *Service {
 		t.Fatalf("create trace store: %v", err)
 	}
 
-	return NewService(aiClient, traceStore, memoryStore)
+	workspaceStore, err := NewWorkspaceStore(t.TempDir() + "/workspaces.json")
+	if err != nil {
+		t.Fatalf("create workspace store: %v", err)
+	}
+
+	return NewService(aiClient, traceStore, memoryStore, workspaceStore)
+}
+
+func newGitFixture(t *testing.T) string {
+	t.Helper()
+
+	dir := t.TempDir()
+	runTestGit(t, dir, "init")
+	runTestGit(t, dir, "config", "user.email", "berry@example.test")
+	runTestGit(t, dir, "config", "user.name", "Berry")
+
+	if err := os.WriteFile(filepath.Join(dir, "README.md"), []byte("# Fixture\n"), 0o644); err != nil {
+		t.Fatalf("write fixture readme: %v", err)
+	}
+
+	runTestGit(t, dir, "add", "README.md")
+	runTestGit(t, dir, "commit", "-m", "init fixture")
+
+	return dir
+}
+
+func runTestGit(t *testing.T, dir string, args ...string) {
+	t.Helper()
+
+	command := exec.Command("git", args...)
+	command.Dir = dir
+	output, err := command.CombinedOutput()
+	if err != nil {
+		t.Fatalf("git %v failed: %v\n%s", args, err, string(output))
+	}
 }
 
 type roundTripFunc func(*http.Request) (*http.Response, error)

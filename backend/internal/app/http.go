@@ -23,6 +23,8 @@ func (s *HTTPServer) Router() *gin.Engine {
 	router.GET("/api/memories", s.memories)
 	router.GET("/api/messages", s.messages)
 	router.GET("/api/traces/:trace_id", s.trace)
+	router.GET("/api/workspaces/current", s.currentWorkspace)
+	router.POST("/api/workspaces", s.connectWorkspace)
 	router.POST("/api/chat", s.chat)
 	return router
 }
@@ -108,5 +110,61 @@ func (s *HTTPServer) trace(c *gin.Context) {
 
 	c.JSON(http.StatusOK, gin.H{
 		"trace": trace,
+	})
+}
+
+func (s *HTTPServer) connectWorkspace(c *gin.Context) {
+	var request WorkspaceRequest
+	if err := c.ShouldBindJSON(&request); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "invalid request body",
+		})
+		return
+	}
+
+	workspace, err := s.service.ConnectWorkspace(request.Path)
+	if err != nil {
+		if errors.Is(err, ErrInvalidWorkspace) {
+			c.JSON(http.StatusBadRequest, gin.H{
+				"error": err.Error(),
+			})
+			return
+		}
+
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": "internal server error",
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"workspace": workspace,
+	})
+}
+
+func (s *HTTPServer) currentWorkspace(c *gin.Context) {
+	workspace, ok, err := s.service.CurrentWorkspace()
+	if err != nil {
+		if errors.Is(err, ErrInvalidWorkspace) {
+			c.JSON(http.StatusBadRequest, gin.H{
+				"error": err.Error(),
+			})
+			return
+		}
+
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": "internal server error",
+		})
+		return
+	}
+	if !ok {
+		c.JSON(http.StatusOK, gin.H{
+			"workspace": nil,
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"workspace": workspace,
 	})
 }

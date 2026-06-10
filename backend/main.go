@@ -44,7 +44,21 @@ func main() {
 		panic(err)
 	}
 
-	service := app.NewService(app.NewAIClientWithTimeout(aiEngineBaseURL, aiEngineTimeout), traceStore, memoryStore)
+	workspaceStorePath := os.Getenv("WORKSPACE_STORE_PATH")
+	if workspaceStorePath == "" {
+		workspaceStorePath = ".data/workspaces.json"
+	}
+	workspaceStore, err := app.NewWorkspaceStore(workspaceStorePath)
+	if err != nil {
+		panic(err)
+	}
+
+	service := app.NewService(
+		app.NewAIClientWithTimeout(aiEngineBaseURL, aiEngineTimeout),
+		traceStore,
+		memoryStore,
+		workspaceStore,
+	)
 	router := app.NewHTTPServer(service).Router()
 
 	if err := router.Run(":" + port); err != nil {
