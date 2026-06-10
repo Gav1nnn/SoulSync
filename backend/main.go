@@ -35,7 +35,16 @@ func main() {
 		panic(err)
 	}
 
-	service := app.NewService(app.NewAIClientWithTimeout(aiEngineBaseURL, aiEngineTimeout), app.NewTraceStore(), memoryStore)
+	traceStorePath := os.Getenv("TRACE_STORE_PATH")
+	if traceStorePath == "" {
+		traceStorePath = ".data/trace-store.json"
+	}
+	traceStore, err := app.NewTraceStoreWithPath(traceStorePath)
+	if err != nil {
+		panic(err)
+	}
+
+	service := app.NewService(app.NewAIClientWithTimeout(aiEngineBaseURL, aiEngineTimeout), traceStore, memoryStore)
 	router := app.NewHTTPServer(service).Router()
 
 	if err := router.Run(":" + port); err != nil {

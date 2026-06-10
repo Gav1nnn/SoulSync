@@ -82,7 +82,7 @@ func (s *Service) Chat(ctx context.Context, message string) (ChatResponse, error
 	}
 	memoryWritten := len(writtenMemories) > 0
 
-	s.traceStore.Append(Trace{
+	if err := s.traceStore.Append(Trace{
 		TraceID:               traceID,
 		UserMessage:           trimmedMessage,
 		Reply:                 reply.Reply,
@@ -94,7 +94,9 @@ func (s *Service) Chat(ctx context.Context, message string) (ChatResponse, error
 		StartedAt:             startedAt,
 		FinishedAt:            finishedAt,
 		DurationMS:            finishedAt.Sub(startedAt).Milliseconds(),
-	})
+	}); err != nil {
+		return ChatResponse{}, fmt.Errorf("save trace: %w", err)
+	}
 
 	return ChatResponse{
 		Reply:                reply.Reply,
@@ -109,4 +111,19 @@ func (s *Service) Chat(ctx context.Context, message string) (ChatResponse, error
 
 func (s *Service) Memories() []Memory {
 	return s.memoryStore.ListMemories()
+}
+
+func (s *Service) RecentMessages(limit int) []Message {
+	if limit <= 0 {
+		limit = 50
+	}
+	if limit > 200 {
+		limit = 200
+	}
+
+	return s.memoryStore.RecentMessages(limit)
+}
+
+func (s *Service) Trace(traceID string) (Trace, bool) {
+	return s.traceStore.Get(traceID)
 }

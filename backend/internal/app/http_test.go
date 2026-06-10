@@ -151,6 +151,114 @@ func TestMemoriesEndpointReturnsSavedMemories(t *testing.T) {
 	}
 }
 
+func TestTraceEndpointReturnsCompleteTrace(t *testing.T) {
+	aiClient := NewAIClientWithHTTPClient("http://ai-engine.local", &http.Client{
+		Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
+			return &http.Response{
+				StatusCode: http.StatusOK,
+				Header:     http.Header{"Content-Type": []string{"application/json"}},
+				Body: io.NopCloser(bytes.NewBufferString(
+					`{"reply":"Berry reply","persona":"Berry","context_used":["persona","knowledge","memory","ollama"],"used_persona":true,"used_memory_ids":["mem-1"],"used_knowledge_chunk_ids":["chunk-1"],"memory_written":false,"memory_candidates":[]}`,
+				)),
+			}, nil
+		}),
+	})
+	server := NewHTTPServer(newTestService(t, aiClient)).Router()
+
+	chatBody := bytes.NewBufferString(`{"message":"帮我解释这个接口"}`)
+	chatRequest := httptest.NewRequest(http.MethodPost, "/api/chat", chatBody)
+	chatRequest.Header.Set("Content-Type", "application/json")
+	chatRecorder := httptest.NewRecorder()
+	server.ServeHTTP(chatRecorder, chatRequest)
+	if chatRecorder.Code != http.StatusOK {
+		t.Fatalf("expected chat status 200, got %d", chatRecorder.Code)
+	}
+
+	var chatResponse ChatResponse
+	if err := json.Unmarshal(chatRecorder.Body.Bytes(), &chatResponse); err != nil {
+		t.Fatalf("decode chat response: %v", err)
+	}
+
+	request := httptest.NewRequest(http.MethodGet, "/api/traces/"+chatResponse.TraceID, nil)
+	recorder := httptest.NewRecorder()
+	server.ServeHTTP(recorder, request)
+
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d", recorder.Code)
+	}
+
+	var response struct {
+		Trace Trace `json:"trace"`
+	}
+	if err := json.Unmarshal(recorder.Body.Bytes(), &response); err != nil {
+		t.Fatalf("decode trace response: %v", err)
+	}
+
+	if response.Trace.TraceID != chatResponse.TraceID {
+		t.Fatalf("unexpected trace id: %#v", response.Trace)
+	}
+	if len(response.Trace.UsedMemoryIDs) != 1 || response.Trace.UsedMemoryIDs[0] != "mem-1" {
+		t.Fatalf("expected memory ids in trace: %#v", response.Trace)
+	}
+	if len(response.Trace.UsedKnowledgeChunkIDs) != 1 || response.Trace.UsedKnowledgeChunkIDs[0] != "chunk-1" {
+		t.Fatalf("expected knowledge chunk ids in trace: %#v", response.Trace)
+	}
+	if response.Trace.DurationMS < 0 {
+		t.Fatalf("expected non-negative duration: %#v", response.Trace)
+	}
+}
+
+func TestMessagesEndpointReturnsRecentMessages(t *testing.T) {
+	aiClient := NewAIClientWithHTTPClient("http://ai-engine.local", &http.Client{
+		Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
+			return &http.Response{
+				StatusCode: http.StatusOK,
+				Header:     http.Header{"Content-Type": []string{"application/json"}},
+				Body: io.NopCloser(bytes.NewBufferString(
+					`{"reply":"Berry reply","persona":"Berry","context_used":["persona","persona.examples","mock_fallback"],"used_persona":true,"used_memory_ids":[],"used_knowledge_chunk_ids":[],"memory_written":false,"memory_candidates":[]}`,
+				)),
+			}, nil
+		}),
+	})
+	server := NewHTTPServer(newTestService(t, aiClient)).Router()
+
+	for _, message := range []string{"第一条", "第二条"} {
+		chatBody := bytes.NewBufferString(`{"message":"` + message + `"}`)
+		chatRequest := httptest.NewRequest(http.MethodPost, "/api/chat", chatBody)
+		chatRequest.Header.Set("Content-Type", "application/json")
+		chatRecorder := httptest.NewRecorder()
+		server.ServeHTTP(chatRecorder, chatRequest)
+		if chatRecorder.Code != http.StatusOK {
+			t.Fatalf("expected chat status 200, got %d", chatRecorder.Code)
+		}
+	}
+
+	request := httptest.NewRequest(http.MethodGet, "/api/messages?limit=2", nil)
+	recorder := httptest.NewRecorder()
+	server.ServeHTTP(recorder, request)
+
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d", recorder.Code)
+	}
+
+	var response struct {
+		Messages []Message `json:"messages"`
+	}
+	if err := json.Unmarshal(recorder.Body.Bytes(), &response); err != nil {
+		t.Fatalf("decode messages response: %v", err)
+	}
+
+	if len(response.Messages) != 2 {
+		t.Fatalf("expected 2 recent messages, got %#v", response.Messages)
+	}
+	if response.Messages[0].Role != "user" || response.Messages[0].Content != "第二条" {
+		t.Fatalf("unexpected recent messages: %#v", response.Messages)
+	}
+	if response.Messages[1].Role != "assistant" || response.Messages[1].Content != "Berry reply" {
+		t.Fatalf("unexpected recent messages: %#v", response.Messages)
+	}
+}
+
 func TestChatSendsRecentMessagesToAIEngine(t *testing.T) {
 	callCount := 0
 	aiClient := NewAIClientWithHTTPClient("http://ai-engine.local", &http.Client{
@@ -208,7 +316,12 @@ func newTestService(t *testing.T, aiClient *AIClient) *Service {
 		t.Fatalf("create memory store: %v", err)
 	}
 
-	return NewService(aiClient, NewTraceStore(), memoryStore)
+	traceStore, err := NewTraceStoreWithPath(t.TempDir() + "/trace-store.json")
+	if err != nil {
+		t.Fatalf("create trace store: %v", err)
+	}
+
+	return NewService(aiClient, traceStore, memoryStore)
 }
 
 type roundTripFunc func(*http.Request) (*http.Response, error)
