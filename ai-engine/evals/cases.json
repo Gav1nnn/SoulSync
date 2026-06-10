@@ -21,6 +21,18 @@
       "fetch(\"/api/users\")",
       "Loading...",
       "No data yet."
+    ],
+    "plan": [
+      "读取接口",
+      "生成类型",
+      "生成 API client",
+      "生成页面"
+    ],
+    "memories": [
+      "页面必须包含加载态、错误态和空状态。"
+    ],
+    "knowledge": [
+      "Vue 页面应使用 script setup 和 ref 管理列表状态。"
     ]
   },
   {
@@ -45,6 +57,18 @@
       "fetch(\"/api/orders\")",
       "Loading...",
       "No data yet."
+    ],
+    "plan": [
+      "读取接口",
+      "生成类型",
+      "生成 API client",
+      "生成页面"
+    ],
+    "memories": [
+      "页面必须包含加载态、错误态和空状态。"
+    ],
+    "knowledge": [
+      "Vue 页面应使用 script setup 和 ref 管理列表状态。"
     ]
   }
 ]

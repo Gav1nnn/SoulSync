@@ -172,6 +172,17 @@ DEEPEVAL_TELEMETRY_OPT_OUT=1 ./.venv/bin/python -m evals.run_agent_eval
 
 当前 eval 使用本地 fixture 和固定 Agent 任务集，先覆盖接口到页面生成链路。安装 `deepeval` 后，报告中的 `deepeval_available` 会变为 `true`。
 
+报告包含以下本地质量维度和阈值：
+
+- `task_completion >= 1.0`
+- `tool_correctness >= 1.0`
+- `plan_adherence >= 0.75`
+- `plan_quality >= 0.75`
+- `frontend_quality >= 0.8`
+- `contextual_relevancy >= 0.75`
+- `faithfulness >= 1.0`
+- `persona_memory_safety >= 1.0`
+
 ## 手动联调
 
 ### 健康检查
