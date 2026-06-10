@@ -1,0 +1,50 @@
+[
+  {
+    "id": "gin_users_to_vue_page",
+    "goal": "根据用户列表接口生成 Vue 页面",
+    "api": {
+      "method": "GET",
+      "path": "/api/users",
+      "handler": "listUsers",
+      "handler_file": "backend/main.go"
+    },
+    "frontend_entry": "frontend/src/views/UserListView.vue",
+    "api_client": "frontend/src/api/users.ts",
+    "type_file": "frontend/src/types/user.ts",
+    "expected_files": [
+      "frontend/src/types/soulsyncUser.ts",
+      "frontend/src/api/soulsyncUser.ts",
+      "frontend/src/views/SoulSyncUserView.vue"
+    ],
+    "required_snippets": [
+      "export type SoulSyncUser",
+      "fetch(\"/api/users\")",
+      "Loading...",
+      "No data yet."
+    ]
+  },
+  {
+    "id": "gin_orders_to_vue_page",
+    "goal": "根据订单列表接口生成前端页面",
+    "api": {
+      "method": "GET",
+      "path": "/api/orders",
+      "handler": "listOrders",
+      "handler_file": "backend/main.go"
+    },
+    "frontend_entry": "frontend/src/views/OrderListView.vue",
+    "api_client": "frontend/src/api/orders.ts",
+    "type_file": "frontend/src/types/order.ts",
+    "expected_files": [
+      "frontend/src/types/soulsyncOrder.ts",
+      "frontend/src/api/soulsyncOrder.ts",
+      "frontend/src/views/SoulSyncOrderView.vue"
+    ],
+    "required_snippets": [
+      "export type SoulSyncOrder",
+      "fetch(\"/api/orders\")",
+      "Loading...",
+      "No data yet."
+    ]
+  }
+]

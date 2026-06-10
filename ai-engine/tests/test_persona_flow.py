@@ -221,6 +221,14 @@ class PersonaFlowTests(unittest.TestCase):
         self.assertEqual(finish_response.action.type, "finish")
         self.assertIn("改动 3 个文件", finish_response.summary)
 
+    def test_agent_eval_cases_pass_locally(self) -> None:
+        from evals.run_agent_eval import evaluate_case, load_cases
+
+        results = [evaluate_case(case) for case in load_cases()]
+
+        self.assertGreaterEqual(len(results), 2)
+        self.assertTrue(all(result.passed for result in results), results)
+
     def test_prompt_builder_contains_core_persona_fields(self) -> None:
         persona = default_berry_persona()
 

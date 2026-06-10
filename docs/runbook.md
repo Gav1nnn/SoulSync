@@ -161,6 +161,17 @@ cd ai-engine
 ./.venv/bin/python -m unittest discover -s tests -p 'test_*.py'
 ```
 
+### Agent eval
+
+默认关闭 DeepEval 遥测：
+
+```bash
+cd ai-engine
+DEEPEVAL_TELEMETRY_OPT_OUT=1 ./.venv/bin/python -m evals.run_agent_eval
+```
+
+当前 eval 使用本地 fixture 和固定 Agent 任务集，先覆盖接口到页面生成链路。安装 `deepeval` 后，报告中的 `deepeval_available` 会变为 `true`。
+
 ## 手动联调
 
 ### 健康检查
