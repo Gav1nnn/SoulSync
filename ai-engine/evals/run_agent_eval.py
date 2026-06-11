@@ -7,7 +7,14 @@ from importlib import util
 from pathlib import Path
 
 from app.orchestration.frontend_codegen import next_generated_frontend_action
-from app.schemas import APICandidate, AgentObservation, AgentStepRequest, WorkspaceCandidate, WorkspaceSummary
+from app.schemas import (
+    APICandidate,
+    AgentObservation,
+    AgentStepRequest,
+    ProjectDocSnippet,
+    WorkspaceCandidate,
+    WorkspaceSummary,
+)
 
 
 ROOT = Path(__file__).resolve().parent
@@ -264,6 +271,14 @@ def build_request(case: dict, changed_files: list[str]) -> AgentStepRequest:
             ],
             project_doc_candidates=[
                 WorkspaceCandidate(path=path, kind="project.docs", reason="fixture docs")
+                for path in case.get("project_docs", [])
+            ],
+            project_doc_snippets=[
+                ProjectDocSnippet(
+                    path=path,
+                    kind="project.docs",
+                    content="Use existing Vue views, API clients, loading state, error state, and empty state.",
+                )
                 for path in case.get("project_docs", [])
             ],
             type_file_candidates=[

@@ -492,6 +492,9 @@ func TestCurrentWorkspaceSummaryScansProjectCandidates(t *testing.T) {
 	if !containsCandidate(response.Summary.ProjectDocCandidates, "README.md") || !containsCandidate(response.Summary.ProjectDocCandidates, "docs/api.md") {
 		t.Fatalf("expected project doc candidates: %#v", response.Summary.ProjectDocCandidates)
 	}
+	if len(response.Summary.ProjectDocSnippets) == 0 || !strings.Contains(response.Summary.ProjectDocSnippets[0].Content, "Fixture") {
+		t.Fatalf("expected project doc snippets: %#v", response.Summary.ProjectDocSnippets)
+	}
 	userAPI, ok := findAPICandidate(response.Summary.APICandidates, "GET", "/api/users")
 	if !ok {
 		t.Fatalf("expected users API candidate: %#v", response.Summary.APICandidates)

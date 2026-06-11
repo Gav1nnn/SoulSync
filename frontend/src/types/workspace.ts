@@ -29,6 +29,12 @@ export type ApiCandidate = {
   reason: string;
 };
 
+export type ProjectDocSnippet = {
+  path: string;
+  kind: string;
+  content: string;
+};
+
 export type WorkspaceSummary = {
   workspace_path: string;
   root_name: string;
@@ -39,6 +45,7 @@ export type WorkspaceSummary = {
   backend_route_candidates: WorkspaceCandidate[];
   api_candidates: ApiCandidate[];
   project_doc_candidates: WorkspaceCandidate[];
+  project_doc_snippets: ProjectDocSnippet[];
   type_file_candidates: WorkspaceCandidate[];
   frontend_entry_candidates: WorkspaceCandidate[];
   api_client_candidates: WorkspaceCandidate[];

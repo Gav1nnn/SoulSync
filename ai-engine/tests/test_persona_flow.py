@@ -3,7 +3,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from app.llm.client import LLMClientError, current_provider, filter_memory_candidates, load_settings
-from app.orchestration.agent_plan import generate_agent_plan
+from app.orchestration.agent_plan import build_workspace_context, generate_agent_plan
 from app.orchestration.agent_step import generate_agent_step
 from app.orchestration.generate_reply import generate_reply
 from app.persona.examples import berry_few_shot_messages
@@ -24,6 +24,7 @@ from app.schemas import (
     MemoryCandidate,
     MemoryContext,
     ConversationMessage,
+    ProjectDocSnippet,
     WorkspaceCandidate,
     WorkspaceSummary,
 )
@@ -60,6 +61,13 @@ class PersonaFlowTests(unittest.TestCase):
                 project_doc_candidates=[
                     WorkspaceCandidate(path="README.md", kind="project.readme", reason="docs")
                 ],
+                project_doc_snippets=[
+                    ProjectDocSnippet(
+                        path="README.md",
+                        kind="project.readme",
+                        content="Use existing Vue views and API clients.",
+                    )
+                ],
                 api_client_candidates=[
                     WorkspaceCandidate(path="frontend/src/api/users.ts", kind="frontend.api_client", reason="api")
                 ],
@@ -87,6 +95,30 @@ class PersonaFlowTests(unittest.TestCase):
         self.assertEqual(response.initial_action.path, "backend/main.go")
         self.assertIn("frontend/src/api/users.ts", response.files_to_read)
 
+    def test_agent_plan_workspace_context_includes_project_doc_snippets(self) -> None:
+        request = AgentPlanRequest(
+            goal="根据用户列表接口生成页面",
+            workspace_summary=WorkspaceSummary(
+                workspace_path="/tmp/project",
+                root_name="project",
+                project_doc_candidates=[
+                    WorkspaceCandidate(path="README.md", kind="project.readme", reason="docs")
+                ],
+                project_doc_snippets=[
+                    ProjectDocSnippet(
+                        path="README.md",
+                        kind="project.readme",
+                        content="Use existing Vue views and API clients.",
+                    )
+                ],
+            ),
+        )
+
+        context = build_workspace_context(request)
+
+        self.assertIn("Project doc snippets", context)
+        self.assertIn("Use existing Vue views and API clients.", context)
+
     @patch("app.orchestration.agent_step.generate_llm_agent_step")
     def test_agent_step_fallback_reads_then_generates_frontend_files(
         self,
@@ -104,6 +136,13 @@ class PersonaFlowTests(unittest.TestCase):
             ],
             project_doc_candidates=[
                 WorkspaceCandidate(path="README.md", kind="project.readme", reason="docs")
+            ],
+            project_doc_snippets=[
+                ProjectDocSnippet(
+                    path="README.md",
+                    kind="project.readme",
+                    content="Use existing Vue views and API clients.",
+                )
             ],
             api_client_candidates=[
                 WorkspaceCandidate(path="frontend/src/api/users.ts", kind="frontend.api_client", reason="api")

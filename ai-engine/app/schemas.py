@@ -61,6 +61,12 @@ class APICandidate(BaseModel):
     reason: str = ""
 
 
+class ProjectDocSnippet(BaseModel):
+    path: str
+    kind: str
+    content: str
+
+
 class WorkspaceSummary(BaseModel):
     workspace_path: str = ""
     root_name: str = ""
@@ -71,6 +77,7 @@ class WorkspaceSummary(BaseModel):
     backend_route_candidates: list[WorkspaceCandidate] = Field(default_factory=list)
     api_candidates: list[APICandidate] = Field(default_factory=list)
     project_doc_candidates: list[WorkspaceCandidate] = Field(default_factory=list)
+    project_doc_snippets: list[ProjectDocSnippet] = Field(default_factory=list)
     type_file_candidates: list[WorkspaceCandidate] = Field(default_factory=list)
     frontend_entry_candidates: list[WorkspaceCandidate] = Field(default_factory=list)
     api_client_candidates: list[WorkspaceCandidate] = Field(default_factory=list)

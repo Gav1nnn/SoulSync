@@ -112,6 +112,7 @@ def build_step_context(request: AgentStepRequest) -> str:
         f"Workspace: {summary.root_name} ({summary.workspace_path})",
         "API candidates:\n" + api_candidate_lines(summary.api_candidates),
         "Project doc candidates:\n" + candidate_lines(summary.project_doc_candidates),
+        "Project doc snippets:\n" + project_doc_snippet_lines(summary.project_doc_snippets),
         "Validation commands:\n" + "\n".join(f"- {command}" for command in summary.validation_commands[:8]),
         "Previous observation:\n" + observation_context(request),
         "Read files:\n" + read_files_context(request),
@@ -175,6 +176,12 @@ def candidate_lines(candidates) -> str:
     if not candidates:
         return "- none"
     return "\n".join(f"- {candidate.path} ({candidate.kind}): {candidate.reason}" for candidate in candidates[:8])
+
+
+def project_doc_snippet_lines(snippets) -> str:
+    if not snippets:
+        return "- none"
+    return "\n".join(f"- {snippet.path} ({snippet.kind}): {snippet.content}" for snippet in snippets[:4])
 
 
 def next_unread_file(request: AgentStepRequest) -> str:

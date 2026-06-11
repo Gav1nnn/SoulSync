@@ -18,6 +18,8 @@ const (
 	maxWorkspaceScanFiles = 700
 	maxTreeItems          = 80
 	maxCandidateItems     = 12
+	maxProjectDocSnippets = 4
+	maxProjectDocChars    = 1600
 )
 
 var skippedWorkspaceDirs = map[string]bool{
@@ -49,6 +51,7 @@ func buildWorkspaceSummary(root string) (WorkspaceSummary, error) {
 		return WorkspaceSummary{}, err
 	}
 
+	projectDocCandidates := detectProjectDocCandidates(files)
 	return WorkspaceSummary{
 		WorkspacePath:           root,
 		RootName:                filepath.Base(root),
@@ -58,7 +61,8 @@ func buildWorkspaceSummary(root string) (WorkspaceSummary, error) {
 		BackendFrameworks:       detectBackendFrameworks(files),
 		BackendRouteCandidates:  detectBackendRouteCandidates(files),
 		APICandidates:           detectAPICandidates(files),
-		ProjectDocCandidates:    detectProjectDocCandidates(files),
+		ProjectDocCandidates:    projectDocCandidates,
+		ProjectDocSnippets:      detectProjectDocSnippets(files, projectDocCandidates),
 		TypeFileCandidates:      detectTypeFileCandidates(files),
 		FrontendEntryCandidates: detectFrontendEntryCandidates(files),
 		APIClientCandidates:     detectAPIClientCandidates(files),
@@ -302,6 +306,52 @@ func detectProjectDocCandidates(files []scannedWorkspaceFile) []WorkspaceCandida
 	}
 
 	return candidates
+}
+
+func detectProjectDocSnippets(files []scannedWorkspaceFile, candidates []WorkspaceCandidate) []ProjectDocSnippet {
+	if len(candidates) == 0 {
+		return []ProjectDocSnippet{}
+	}
+
+	fileByPath := map[string]scannedWorkspaceFile{}
+	for _, file := range files {
+		fileByPath[file.relPath] = file
+	}
+
+	snippets := make([]ProjectDocSnippet, 0, min(maxProjectDocSnippets, len(candidates)))
+	for _, candidate := range candidates {
+		if len(snippets) >= maxProjectDocSnippets {
+			break
+		}
+		file, ok := fileByPath[candidate.Path]
+		if !ok {
+			continue
+		}
+		content := normalizeProjectDocSnippet(readSmallText(file.absPath))
+		if content == "" {
+			continue
+		}
+		snippets = append(snippets, ProjectDocSnippet{
+			Path:    candidate.Path,
+			Kind:    candidate.Kind,
+			Content: content,
+		})
+	}
+
+	return snippets
+}
+
+func normalizeProjectDocSnippet(content string) string {
+	content = strings.TrimSpace(content)
+	if content == "" {
+		return ""
+	}
+	content = strings.Join(strings.Fields(content), " ")
+	runes := []rune(content)
+	if len(runes) > maxProjectDocChars {
+		return string(runes[:maxProjectDocChars]) + " ... truncated"
+	}
+	return content
 }
 
 func detectGinAPICandidates(file scannedWorkspaceFile, content string) []APICandidate {

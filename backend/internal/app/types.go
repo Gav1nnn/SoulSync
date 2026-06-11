@@ -180,6 +180,7 @@ type WorkspaceSummary struct {
 	BackendRouteCandidates  []WorkspaceCandidate `json:"backend_route_candidates"`
 	APICandidates           []APICandidate       `json:"api_candidates"`
 	ProjectDocCandidates    []WorkspaceCandidate `json:"project_doc_candidates"`
+	ProjectDocSnippets      []ProjectDocSnippet  `json:"project_doc_snippets"`
 	TypeFileCandidates      []WorkspaceCandidate `json:"type_file_candidates"`
 	FrontendEntryCandidates []WorkspaceCandidate `json:"frontend_entry_candidates"`
 	APIClientCandidates     []WorkspaceCandidate `json:"api_client_candidates"`
@@ -205,6 +206,12 @@ type APICandidate struct {
 	HandlerFile     string               `json:"handler_file"`
 	TypeDefinitions []WorkspaceCandidate `json:"type_definitions"`
 	Reason          string               `json:"reason"`
+}
+
+type ProjectDocSnippet struct {
+	Path    string `json:"path"`
+	Kind    string `json:"kind"`
+	Content string `json:"content"`
 }
 
 type AgentTaskStatus string

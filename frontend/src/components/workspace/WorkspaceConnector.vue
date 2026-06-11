@@ -225,6 +225,11 @@ onMounted(() => {
                 <span>{{ item.kind }}</span>
                 <code>{{ item.path }}</code>
               </li>
+              <li v-for="item in summary.project_doc_snippets.slice(0, 2)" :key="`${item.path}-snippet`">
+                <span>snippet</span>
+                <code>{{ item.path }}</code>
+                <small>{{ item.content }}</small>
+              </li>
               <li v-if="!summary.project_doc_candidates.length" class="muted-row">none</li>
             </ul>
           </section>

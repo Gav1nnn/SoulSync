@@ -156,6 +156,7 @@ def build_workspace_context(request: AgentPlanRequest) -> str:
         "Backend route candidates:\n" + candidate_lines(summary.backend_route_candidates),
         "API candidates:\n" + api_candidate_lines(summary.api_candidates),
         "Project doc candidates:\n" + candidate_lines(summary.project_doc_candidates),
+        "Project doc snippets:\n" + project_doc_snippet_lines(summary.project_doc_snippets),
         "API client candidates:\n" + candidate_lines(summary.api_client_candidates),
         "Frontend entry candidates:\n" + candidate_lines(summary.frontend_entry_candidates),
         "Type file candidates:\n" + candidate_lines(summary.type_file_candidates),
@@ -183,6 +184,12 @@ def api_candidate_lines(candidates) -> str:
             f"file={candidate.handler_file} types={type_paths}"
         )
     return "\n".join(lines)
+
+
+def project_doc_snippet_lines(snippets) -> str:
+    if not snippets:
+        return "- none"
+    return "\n".join(f"- {snippet.path} ({snippet.kind}): {snippet.content}" for snippet in snippets[:4])
 
 
 def parse_json_object(content: str) -> dict:

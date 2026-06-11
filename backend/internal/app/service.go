@@ -522,6 +522,12 @@ func workspaceSummaryContext(summary WorkspaceSummary) []string {
 		context = append(context, fmt.Sprintf("api_candidate=%s %s handler=%s file=%s", candidate.Method, candidate.Path, candidate.Handler, candidate.HandlerFile))
 	}
 	appendCandidate("project_doc_candidate", summary.ProjectDocCandidates)
+	for index, snippet := range summary.ProjectDocSnippets {
+		if index >= 4 {
+			break
+		}
+		context = append(context, fmt.Sprintf("project_doc_snippet=%s: %s", snippet.Path, snippet.Content))
+	}
 	appendCandidate("api_client_candidate", summary.APIClientCandidates)
 	appendCandidate("frontend_entry_candidate", summary.FrontendEntryCandidates)
 	appendCandidate("type_candidate", summary.TypeFileCandidates)
