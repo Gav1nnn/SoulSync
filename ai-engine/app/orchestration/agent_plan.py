@@ -108,6 +108,7 @@ def build_fallback_agent_plan(request: AgentPlanRequest) -> AgentPlanResponse:
             first_path(summary.api_client_candidates),
             first_path(summary.frontend_entry_candidates),
             first_path(summary.type_file_candidates),
+            first_path(summary.project_doc_candidates),
         ]
     )
     plan = [
@@ -120,6 +121,8 @@ def build_fallback_agent_plan(request: AgentPlanRequest) -> AgentPlanResponse:
         plan.append(f"检查 API client 约定：{first_path(summary.api_client_candidates)}")
     if first_path(summary.frontend_entry_candidates):
         plan.append(f"参考前端页面入口：{first_path(summary.frontend_entry_candidates)}")
+    if first_path(summary.project_doc_candidates):
+        plan.append(f"读取项目文档候选：{first_path(summary.project_doc_candidates)}")
     plan.append("给出第一轮只读动作，等待 Go 执行。")
 
     if files_to_read:
@@ -152,6 +155,7 @@ def build_workspace_context(request: AgentPlanRequest) -> str:
         f"Backend frameworks: {', '.join(summary.backend_frameworks) or 'none'}",
         "Backend route candidates:\n" + candidate_lines(summary.backend_route_candidates),
         "API candidates:\n" + api_candidate_lines(summary.api_candidates),
+        "Project doc candidates:\n" + candidate_lines(summary.project_doc_candidates),
         "API client candidates:\n" + candidate_lines(summary.api_client_candidates),
         "Frontend entry candidates:\n" + candidate_lines(summary.frontend_entry_candidates),
         "Type file candidates:\n" + candidate_lines(summary.type_file_candidates),

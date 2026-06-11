@@ -489,6 +489,9 @@ func TestCurrentWorkspaceSummaryScansProjectCandidates(t *testing.T) {
 	if !containsCandidate(response.Summary.BackendRouteCandidates, "backend/main.go") {
 		t.Fatalf("expected backend route candidate: %#v", response.Summary.BackendRouteCandidates)
 	}
+	if !containsCandidate(response.Summary.ProjectDocCandidates, "README.md") || !containsCandidate(response.Summary.ProjectDocCandidates, "docs/api.md") {
+		t.Fatalf("expected project doc candidates: %#v", response.Summary.ProjectDocCandidates)
+	}
 	userAPI, ok := findAPICandidate(response.Summary.APICandidates, "GET", "/api/users")
 	if !ok {
 		t.Fatalf("expected users API candidate: %#v", response.Summary.APICandidates)
@@ -1034,6 +1037,8 @@ func newFrontendBackendFixture(t *testing.T) string {
 	t.Helper()
 
 	dir := newGitFixture(t)
+	writeFixtureFile(t, dir, "README.md", "# Fixture\n\nUse existing Vue views and API clients.\n")
+	writeFixtureFile(t, dir, "docs/api.md", "# API\n\nGET /api/users returns users.\n")
 	writeFixtureFile(t, dir, "frontend/package.json", `{"scripts":{"build":"node -e \"console.log('fixture build ok')\"","test":"node -e \"console.log('fixture test ok')\""},"dependencies":{"vue":"^3.5.0"},"devDependencies":{"vite":"^6.0.0"}}`)
 	writeFixtureFile(t, dir, "frontend/package-lock.json", `{"name":"fixture"}`)
 	writeFixtureFile(t, dir, "frontend/src/views/UserListView.vue", `<template><main>User list</main></template>`)

@@ -179,6 +179,7 @@ type WorkspaceSummary struct {
 	BackendFrameworks       []string             `json:"backend_frameworks"`
 	BackendRouteCandidates  []WorkspaceCandidate `json:"backend_route_candidates"`
 	APICandidates           []APICandidate       `json:"api_candidates"`
+	ProjectDocCandidates    []WorkspaceCandidate `json:"project_doc_candidates"`
 	TypeFileCandidates      []WorkspaceCandidate `json:"type_file_candidates"`
 	FrontendEntryCandidates []WorkspaceCandidate `json:"frontend_entry_candidates"`
 	APIClientCandidates     []WorkspaceCandidate `json:"api_client_candidates"`

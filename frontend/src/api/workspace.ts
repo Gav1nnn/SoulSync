@@ -65,6 +65,7 @@ export async function fetchCurrentWorkspaceSummary(): Promise<WorkspaceSummaryRe
     !Array.isArray(payload.summary.backend_frameworks) ||
     !Array.isArray(payload.summary.backend_route_candidates) ||
     !Array.isArray(payload.summary.api_candidates) ||
+    !Array.isArray(payload.summary.project_doc_candidates) ||
     !Array.isArray(payload.summary.validation_commands)
   ) {
     throw new WorkspaceApiError("项目摘要响应结构不完整，请检查接口返回。");

@@ -57,6 +57,9 @@ class PersonaFlowTests(unittest.TestCase):
                 api_candidates=[
                     APICandidate(method="GET", path="/api/users", handler="listUsers", handler_file="backend/main.go")
                 ],
+                project_doc_candidates=[
+                    WorkspaceCandidate(path="README.md", kind="project.readme", reason="docs")
+                ],
                 api_client_candidates=[
                     WorkspaceCandidate(path="frontend/src/api/users.ts", kind="frontend.api_client", reason="api")
                 ],
@@ -98,6 +101,9 @@ class PersonaFlowTests(unittest.TestCase):
             ],
             api_candidates=[
                 APICandidate(method="GET", path="/api/users", handler="listUsers", handler_file="backend/main.go")
+            ],
+            project_doc_candidates=[
+                WorkspaceCandidate(path="README.md", kind="project.readme", reason="docs")
             ],
             api_client_candidates=[
                 WorkspaceCandidate(path="frontend/src/api/users.ts", kind="frontend.api_client", reason="api")

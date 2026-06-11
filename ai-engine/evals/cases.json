@@ -11,6 +11,10 @@
     "frontend_entry": "frontend/src/views/UserListView.vue",
     "api_client": "frontend/src/api/users.ts",
     "type_file": "frontend/src/types/user.ts",
+    "project_docs": [
+      "README.md",
+      "docs/api.md"
+    ],
     "expected_files": [
       "frontend/src/types/soulsyncUser.ts",
       "frontend/src/api/soulsyncUser.ts",
@@ -47,6 +51,10 @@
     "frontend_entry": "frontend/src/views/OrderListView.vue",
     "api_client": "frontend/src/api/orders.ts",
     "type_file": "frontend/src/types/order.ts",
+    "project_docs": [
+      "README.md",
+      "docs/api.md"
+    ],
     "expected_files": [
       "frontend/src/types/soulsyncOrder.ts",
       "frontend/src/api/soulsyncOrder.ts",

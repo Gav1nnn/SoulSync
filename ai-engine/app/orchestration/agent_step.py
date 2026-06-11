@@ -111,6 +111,7 @@ def build_step_context(request: AgentStepRequest) -> str:
         "Plan:\n" + "\n".join(f"- {item}" for item in request.plan[:8]),
         f"Workspace: {summary.root_name} ({summary.workspace_path})",
         "API candidates:\n" + api_candidate_lines(summary.api_candidates),
+        "Project doc candidates:\n" + candidate_lines(summary.project_doc_candidates),
         "Validation commands:\n" + "\n".join(f"- {command}" for command in summary.validation_commands[:8]),
         "Previous observation:\n" + observation_context(request),
         "Read files:\n" + read_files_context(request),
@@ -170,6 +171,12 @@ def api_candidate_lines(candidates) -> str:
     return "\n".join(lines)
 
 
+def candidate_lines(candidates) -> str:
+    if not candidates:
+        return "- none"
+    return "\n".join(f"- {candidate.path} ({candidate.kind}): {candidate.reason}" for candidate in candidates[:8])
+
+
 def next_unread_file(request: AgentStepRequest) -> str:
     read_paths = {file.path for file in request.read_files}
     candidates = []
@@ -177,6 +184,7 @@ def next_unread_file(request: AgentStepRequest) -> str:
     candidates.extend(candidate.path for candidate in request.workspace_summary.api_client_candidates)
     candidates.extend(candidate.path for candidate in request.workspace_summary.frontend_entry_candidates)
     candidates.extend(candidate.path for candidate in request.workspace_summary.type_file_candidates)
+    candidates.extend(candidate.path for candidate in request.workspace_summary.project_doc_candidates)
     for path in candidates:
         if path and path not in read_paths:
             return path

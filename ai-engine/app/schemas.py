@@ -70,6 +70,7 @@ class WorkspaceSummary(BaseModel):
     backend_frameworks: list[str] = Field(default_factory=list)
     backend_route_candidates: list[WorkspaceCandidate] = Field(default_factory=list)
     api_candidates: list[APICandidate] = Field(default_factory=list)
+    project_doc_candidates: list[WorkspaceCandidate] = Field(default_factory=list)
     type_file_candidates: list[WorkspaceCandidate] = Field(default_factory=list)
     frontend_entry_candidates: list[WorkspaceCandidate] = Field(default_factory=list)
     api_client_candidates: list[WorkspaceCandidate] = Field(default_factory=list)

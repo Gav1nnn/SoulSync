@@ -262,6 +262,10 @@ def build_request(case: dict, changed_files: list[str]) -> AgentStepRequest:
             api_client_candidates=[
                 WorkspaceCandidate(path=case["api_client"], kind="frontend.api_client", reason="fixture client")
             ],
+            project_doc_candidates=[
+                WorkspaceCandidate(path=path, kind="project.docs", reason="fixture docs")
+                for path in case.get("project_docs", [])
+            ],
             type_file_candidates=[
                 WorkspaceCandidate(path=case["type_file"], kind="types", reason="fixture type")
             ],

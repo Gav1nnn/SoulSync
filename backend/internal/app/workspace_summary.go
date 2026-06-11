@@ -58,6 +58,7 @@ func buildWorkspaceSummary(root string) (WorkspaceSummary, error) {
 		BackendFrameworks:       detectBackendFrameworks(files),
 		BackendRouteCandidates:  detectBackendRouteCandidates(files),
 		APICandidates:           detectAPICandidates(files),
+		ProjectDocCandidates:    detectProjectDocCandidates(files),
 		TypeFileCandidates:      detectTypeFileCandidates(files),
 		FrontendEntryCandidates: detectFrontendEntryCandidates(files),
 		APIClientCandidates:     detectAPIClientCandidates(files),
@@ -263,6 +264,39 @@ func detectAPICandidates(files []scannedWorkspaceFile) []APICandidate {
 			candidates = append(candidates, candidate)
 			if len(candidates) >= maxCandidateItems {
 				break
+			}
+		}
+	}
+
+	return candidates
+}
+
+func detectProjectDocCandidates(files []scannedWorkspaceFile) []WorkspaceCandidate {
+	candidates := make([]WorkspaceCandidate, 0, maxCandidateItems)
+	for _, file := range files {
+		if len(candidates) >= maxCandidateItems {
+			break
+		}
+		if file.info.IsDir() {
+			continue
+		}
+
+		lowerPath := strings.ToLower(file.relPath)
+		base := strings.ToLower(filepath.Base(file.relPath))
+		switch {
+		case strings.HasPrefix(base, "readme"):
+			candidates = append(candidates, WorkspaceCandidate{Path: file.relPath, Kind: "project.readme", Reason: "README candidate for project conventions"})
+		case strings.HasPrefix(lowerPath, "docs/") || strings.Contains(lowerPath, "/docs/"):
+			if isProjectDocFile(lowerPath) {
+				candidates = append(candidates, WorkspaceCandidate{Path: file.relPath, Kind: "project.docs", Reason: "project documentation candidate"})
+			}
+		case strings.Contains(lowerPath, "openapi") || strings.Contains(lowerPath, "swagger"):
+			if isProjectDocFile(lowerPath) {
+				candidates = append(candidates, WorkspaceCandidate{Path: file.relPath, Kind: "project.api_docs", Reason: "API documentation candidate"})
+			}
+		case strings.Contains(lowerPath, "api") && strings.Contains(lowerPath, "doc"):
+			if isProjectDocFile(lowerPath) {
+				candidates = append(candidates, WorkspaceCandidate{Path: file.relPath, Kind: "project.api_docs", Reason: "API documentation candidate"})
 			}
 		}
 	}
@@ -654,6 +688,15 @@ func workspacePathDepth(path string) int {
 func isTextCodeFile(path string) bool {
 	switch strings.ToLower(filepath.Ext(path)) {
 	case ".go", ".py", ".js", ".jsx", ".ts", ".tsx", ".vue":
+		return true
+	default:
+		return false
+	}
+}
+
+func isProjectDocFile(path string) bool {
+	switch strings.ToLower(filepath.Ext(path)) {
+	case ".md", ".mdx", ".txt", ".json", ".yaml", ".yml":
 		return true
 	default:
 		return false

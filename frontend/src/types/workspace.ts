@@ -38,6 +38,7 @@ export type WorkspaceSummary = {
   backend_frameworks: string[];
   backend_route_candidates: WorkspaceCandidate[];
   api_candidates: ApiCandidate[];
+  project_doc_candidates: WorkspaceCandidate[];
   type_file_candidates: WorkspaceCandidate[];
   frontend_entry_candidates: WorkspaceCandidate[];
   api_client_candidates: WorkspaceCandidate[];
