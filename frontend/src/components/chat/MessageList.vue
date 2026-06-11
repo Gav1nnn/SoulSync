@@ -51,21 +51,21 @@ defineProps<{
 <style scoped>
 .message-list {
   display: grid;
-  min-height: 470px;
+  min-height: 420px;
   max-height: 62vh;
-  gap: 16px;
+  gap: 12px;
   align-content: start;
   overflow: auto;
-  padding: 18px;
-  border: 1px solid rgba(43, 76, 88, 0.12);
-  border-radius: 30px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
   background:
-    linear-gradient(rgba(255, 253, 248, 0.84), rgba(255, 253, 248, 0.7)),
+    linear-gradient(rgba(255, 252, 244, 0.82), rgba(255, 252, 244, 0.7)),
     repeating-linear-gradient(
       to bottom,
       transparent 0,
       transparent 31px,
-      rgba(43, 76, 88, 0.055) 32px
+      rgba(31, 55, 66, 0.045) 32px
     );
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.82);
   scrollbar-width: thin;
@@ -74,38 +74,31 @@ defineProps<{
 .empty-state,
 .message {
   position: relative;
-  padding: 18px;
-  border: 1px solid rgba(43, 76, 88, 0.12);
-  background: rgba(255, 253, 248, 0.92);
+  padding: 14px;
+  border: 1px solid var(--line);
+  background: var(--panel-strong);
 }
 
 .empty-state {
   display: grid;
   gap: 10px;
-  min-height: 260px;
+  min-height: 220px;
   place-content: center;
   overflow: hidden;
-  border-radius: 28px;
+  border-radius: var(--radius);
   text-align: center;
-}
-
-.empty-state::before {
-  position: absolute;
-  inset: 18px;
-  content: "";
-  border: 1px dashed rgba(221, 120, 91, 0.24);
-  border-radius: 22px;
 }
 
 .empty-mark {
   justify-self: center;
   display: grid;
   place-items: center;
-  width: 76px;
-  height: 76px;
-  border-radius: 28px;
-  color: #20333c;
-  background: linear-gradient(145deg, #ffd3bf, #b9d8df);
+  width: 64px;
+  height: 64px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  color: var(--ink);
+  background: rgba(255, 240, 231, 0.84);
   font-size: 0.72rem;
   font-weight: 900;
   letter-spacing: 0.1em;
@@ -121,7 +114,7 @@ defineProps<{
 
 .empty-title,
 .meta {
-  color: #d36f55;
+  color: var(--accent);
   font-size: 0.76rem;
   font-weight: 900;
   letter-spacing: 0.1em;
@@ -129,7 +122,7 @@ defineProps<{
 }
 
 .empty-title {
-  color: #20333c;
+  color: var(--ink);
   font-size: 1.3rem;
   letter-spacing: -0.02em;
   text-transform: none;
@@ -143,7 +136,7 @@ defineProps<{
 
 .empty-copy {
   max-width: 34rem;
-  color: #60717a;
+  color: var(--muted);
 }
 
 .empty-lines {
@@ -157,7 +150,7 @@ defineProps<{
 .empty-lines span {
   height: 7px;
   border-radius: 999px;
-  background: rgba(43, 76, 88, 0.08);
+  background: rgba(31, 55, 66, 0.08);
 }
 
 .empty-lines span:nth-child(2) {
@@ -170,27 +163,25 @@ defineProps<{
 
 .message {
   max-width: 82%;
-  border-radius: 24px;
-  box-shadow: 0 16px 34px rgba(43, 76, 88, 0.08);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-tight);
   animation: message-in 260ms ease both;
 }
 
 .message-assistant {
   justify-self: start;
-  border-bottom-left-radius: 8px;
 }
 
 .message-user {
   justify-self: end;
-  color: #20333c;
+  color: var(--ink);
   border-color: rgba(221, 120, 91, 0.22);
-  border-bottom-right-radius: 8px;
   background: linear-gradient(145deg, #ffe7d8, #fff8f1);
 }
 
 .content {
   margin-top: 8px;
-  color: #283e48;
+  color: var(--ink-soft);
 }
 
 .meta {
@@ -200,7 +191,7 @@ defineProps<{
 }
 
 .meta span:last-child {
-  color: rgba(43, 76, 88, 0.42);
+  color: rgba(31, 55, 66, 0.42);
 }
 
 .loading-copy {
@@ -219,7 +210,7 @@ defineProps<{
   width: 5px;
   height: 5px;
   border-radius: 999px;
-  background: #d36f55;
+  background: var(--accent);
   animation: dot-bounce 900ms ease-in-out infinite;
 }
 

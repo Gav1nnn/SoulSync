@@ -352,15 +352,13 @@ onBeforeUnmount(() => {
 <style scoped>
 .agent-card {
   display: grid;
-  gap: 14px;
-  padding: 16px;
-  border: 1px solid rgba(43, 76, 88, 0.12);
-  border-radius: 24px;
-  background:
-    linear-gradient(135deg, rgba(255, 253, 248, 0.88), rgba(238, 247, 245, 0.8)),
-    linear-gradient(90deg, rgba(49, 95, 112, 0.06), transparent);
-  box-shadow: 0 16px 34px rgba(43, 76, 88, 0.06);
-  backdrop-filter: blur(14px);
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--panel-strong);
+  box-shadow: var(--shadow-tight);
+  backdrop-filter: blur(12px);
 }
 
 .agent-head,
@@ -384,7 +382,7 @@ h2,
 .eyebrow,
 .goal-field span,
 .section-title {
-  color: #d36f55;
+  color: var(--accent);
   font-size: 0.72rem;
   font-weight: 900;
   letter-spacing: 0.1em;
@@ -393,29 +391,29 @@ h2,
 
 h2 {
   margin-top: 3px;
-  color: #20333c;
+  color: var(--ink);
   font-size: 1.1rem;
   line-height: 1.2;
 }
 
 .status-pill {
-  border: 1px solid rgba(43, 76, 88, 0.12);
+  border: 1px solid var(--line);
   border-radius: 999px;
   padding: 6px 9px;
-  color: #315f70;
+  color: var(--cyan);
   background: rgba(255, 255, 255, 0.54);
   font-size: 0.78rem;
   font-weight: 900;
 }
 
 .status-completed {
-  color: #3e765e;
+  color: var(--ok);
   border-color: rgba(93, 156, 123, 0.24);
   background: rgba(235, 249, 240, 0.82);
 }
 
 .status-failed {
-  color: #b33d37;
+  color: var(--danger);
   border-color: rgba(179, 61, 55, 0.24);
   background: rgba(255, 236, 232, 0.82);
 }
@@ -423,7 +421,7 @@ h2 {
 .status-planning,
 .status-running,
 .status-verifying {
-  color: #9a5140;
+  color: var(--warn);
   border-color: rgba(211, 111, 85, 0.26);
   background: rgba(255, 240, 231, 0.86);
 }
@@ -442,29 +440,29 @@ h2 {
   width: 100%;
   min-height: 86px;
   resize: vertical;
-  border: 1px solid rgba(43, 76, 88, 0.14);
-  border-radius: 16px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
   padding: 11px 12px;
-  color: #20333c;
+  color: var(--ink);
   background: rgba(255, 255, 255, 0.66);
   line-height: 1.5;
   outline: none;
 }
 
 .goal-field textarea:focus {
-  border-color: rgba(211, 111, 85, 0.46);
-  background: #fffdf8;
-  box-shadow: 0 0 0 4px rgba(211, 111, 85, 0.1);
+  border-color: rgba(200, 95, 73, 0.46);
+  background: var(--panel-strong);
+  box-shadow: 0 0 0 3px rgba(200, 95, 73, 0.12);
 }
 
 .start-button {
   justify-self: start;
-  min-height: 42px;
-  border: 1px solid rgba(176, 88, 62, 0.5);
-  border-radius: 14px;
+  min-height: 38px;
+  border: 1px solid rgba(153, 64, 49, 0.42);
+  border-radius: var(--radius);
   padding: 0 14px;
-  color: #fffdf8;
-  background: #d36f55;
+  color: #fffaf1;
+  background: var(--accent);
   font-weight: 900;
   cursor: pointer;
 }
@@ -477,23 +475,23 @@ h2 {
 .task-meta {
   flex-wrap: wrap;
   justify-content: flex-start;
-  color: #60717a;
+  color: var(--muted);
   font-size: 0.82rem;
 }
 
 .task-meta code,
 .verification-box code {
-  color: #294654;
-  font-family: "Menlo", "Monaco", "Courier New", monospace;
+  color: var(--ink-soft);
+  font-family: var(--font-mono);
   overflow-wrap: anywhere;
 }
 
 .retry-button {
   min-height: 32px;
   border: 1px solid rgba(179, 61, 55, 0.24);
-  border-radius: 12px;
+  border-radius: var(--radius);
   padding: 0 10px;
-  color: #b33d37;
+  color: var(--danger);
   background: rgba(255, 236, 232, 0.72);
   font-size: 0.78rem;
   font-weight: 900;
@@ -519,10 +517,10 @@ h2 {
 
 .ghost-button {
   min-height: 30px;
-  border: 1px solid rgba(43, 76, 88, 0.12);
-  border-radius: 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
   padding: 0 10px;
-  color: #315f70;
+  color: var(--cyan);
   background: rgba(255, 255, 255, 0.48);
   font-size: 0.76rem;
   font-weight: 900;
@@ -551,7 +549,7 @@ h2 {
 .file-list li,
 .step-list li,
 .verification-box {
-  color: #294654;
+  color: var(--ink-soft);
   line-height: 1.45;
   font-size: 0.88rem;
 }
@@ -571,10 +569,10 @@ h2 {
   align-items: center;
   width: 100%;
   min-height: 38px;
-  border: 1px solid rgba(43, 76, 88, 0.08);
-  border-radius: 12px;
+  border: 1px solid rgba(31, 55, 66, 0.08);
+  border-radius: var(--radius);
   padding: 8px 9px;
-  color: #294654;
+  color: var(--ink-soft);
   background: rgba(255, 255, 255, 0.36);
   cursor: pointer;
   text-align: left;
@@ -593,7 +591,7 @@ h2 {
 }
 
 .recent-task-list small {
-  color: #60717a;
+  color: var(--muted);
   font-size: 0.74rem;
   font-weight: 800;
 }
@@ -602,27 +600,27 @@ h2 {
   width: 9px;
   height: 9px;
   border-radius: 999px;
-  background: #60717a;
+  background: var(--muted);
 }
 
 .status-dot.status-completed {
-  background: #3e765e;
+  background: var(--ok);
 }
 
 .status-dot.status-failed {
-  background: #b33d37;
+  background: var(--danger);
 }
 
 .status-dot.status-planning,
 .status-dot.status-running,
 .status-dot.status-verifying {
-  background: #d36f55;
+  background: var(--accent);
 }
 
 .file-list li {
   padding: 8px;
-  border: 1px solid rgba(43, 76, 88, 0.08);
-  border-radius: 14px;
+  border: 1px solid rgba(31, 55, 66, 0.08);
+  border-radius: var(--radius);
   background: rgba(255, 255, 255, 0.42);
 }
 
@@ -630,8 +628,8 @@ h2 {
   display: grid;
   gap: 7px;
   padding: 10px;
-  border: 1px solid rgba(43, 76, 88, 0.08);
-  border-radius: 14px;
+  border: 1px solid rgba(31, 55, 66, 0.08);
+  border-radius: var(--radius);
   background: rgba(255, 255, 255, 0.42);
 }
 
@@ -644,20 +642,20 @@ h2 {
 }
 
 .step-head strong {
-  color: #315f70;
+  color: var(--cyan);
   font-size: 0.82rem;
 }
 
 .step-head span,
 .step-head small {
-  color: #60717a;
+  color: var(--muted);
   font-size: 0.78rem;
   font-weight: 800;
 }
 
 .step-list p {
   margin: 0;
-  color: #60717a;
+  color: var(--muted);
 }
 
 .compact-list {
@@ -677,8 +675,8 @@ h2 {
 }
 
 .file-list code {
-  color: #294654;
-  font-family: "Menlo", "Monaco", "Courier New", monospace;
+  color: var(--ink-soft);
+  font-family: var(--font-mono);
   overflow-wrap: anywhere;
 }
 
@@ -688,18 +686,18 @@ h2 {
   gap: 8px;
   align-items: start;
   padding: 8px;
-  border: 1px solid rgba(43, 76, 88, 0.08);
-  border-radius: 14px;
+  border: 1px solid rgba(31, 55, 66, 0.08);
+  border-radius: var(--radius);
   background: rgba(255, 255, 255, 0.42);
 }
 
 .log-list span {
-  color: #60717a;
+  color: var(--muted);
   font-size: 0.78rem;
 }
 
 .log-list strong {
-  color: #315f70;
+  color: var(--cyan);
   font-size: 0.78rem;
 }
 
@@ -709,14 +707,14 @@ h2 {
   display: grid;
   gap: 5px;
   padding: 10px;
-  border: 1px solid rgba(43, 76, 88, 0.08);
-  border-radius: 14px;
+  border: 1px solid rgba(31, 55, 66, 0.08);
+  border-radius: var(--radius);
   background: rgba(255, 255, 255, 0.42);
 }
 
 .verification-box span,
 .action-box span {
-  color: #3e765e;
+  color: var(--ok);
   font-size: 0.78rem;
   font-weight: 900;
   text-transform: uppercase;
@@ -738,7 +736,7 @@ h2 {
 }
 
 .result-box p {
-  color: #294654;
+  color: var(--ink-soft);
   font-weight: 800;
 }
 
@@ -746,32 +744,32 @@ h2 {
   display: grid;
   gap: 4px;
   padding-left: 18px;
-  color: #60717a;
+  color: var(--muted);
 }
 
 .result-box code {
-  color: #b33d37;
-  font-family: "Menlo", "Monaco", "Courier New", monospace;
+  color: var(--danger);
+  font-family: var(--font-mono);
   overflow-wrap: anywhere;
 }
 
 .verification-box .verify-failed {
-  color: #b33d37;
+  color: var(--danger);
 }
 
 .verification-box .verify-skipped {
-  color: #9a5140;
+  color: var(--warn);
 }
 
 .verification-box p,
 .action-box p {
   margin: 0;
-  color: #60717a;
+  color: var(--muted);
 }
 
 .action-box code {
-  color: #294654;
-  font-family: "Menlo", "Monaco", "Courier New", monospace;
+  color: var(--ink-soft);
+  font-family: var(--font-mono);
   overflow-wrap: anywhere;
 }
 
@@ -782,23 +780,23 @@ h2 {
 }
 
 .tag-list span {
-  border: 1px solid rgba(43, 76, 88, 0.1);
+  border: 1px solid var(--line);
   border-radius: 999px;
   padding: 7px 9px;
-  color: #315f70;
+  color: var(--cyan);
   background: rgba(255, 255, 255, 0.48);
   font-size: 0.78rem;
   font-weight: 800;
 }
 
 .muted-row {
-  color: #60717a;
+  color: var(--muted);
   font-size: 0.88rem;
   line-height: 1.5;
 }
 
 .error-copy {
-  color: #b33d37;
+  color: var(--danger);
   font-size: 0.88rem;
   line-height: 1.5;
 }

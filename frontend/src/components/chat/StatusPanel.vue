@@ -164,29 +164,27 @@ function formatTraceTime(value: string) {
 <style scoped>
 .status-panel {
   position: sticky;
-  top: 18px;
+  top: 12px;
   display: grid;
-  gap: 12px;
+  gap: 10px;
 }
 
 .status-card {
   position: relative;
   display: grid;
-  gap: 8px;
-  padding: 16px;
+  gap: 7px;
+  padding: 13px;
   overflow: hidden;
-  border: 1px solid rgba(43, 76, 88, 0.12);
-  border-radius: 22px;
-  background: rgba(255, 253, 248, 0.78);
-  box-shadow: 0 14px 34px rgba(43, 76, 88, 0.07);
-  backdrop-filter: blur(16px);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--panel);
+  box-shadow: var(--shadow-tight);
+  backdrop-filter: blur(12px);
 }
 
 .hero-card {
-  min-height: 142px;
-  background:
-    radial-gradient(circle at 88% 18%, rgba(255, 211, 191, 0.76), transparent 8rem),
-    linear-gradient(145deg, rgba(255, 253, 248, 0.92), rgba(240, 249, 249, 0.82));
+  min-height: 118px;
+  background: var(--panel-strong);
 }
 
 .status-row {
@@ -202,7 +200,7 @@ function formatTraceTime(value: string) {
 }
 
 .label {
-  color: #d36f55;
+  color: var(--accent);
   font-size: 0.74rem;
   font-weight: 900;
   letter-spacing: 0.1em;
@@ -210,25 +208,25 @@ function formatTraceTime(value: string) {
 }
 
 .value {
-  color: #20333c;
+  color: var(--ink);
   font-size: 1.02rem;
   font-weight: 900;
   overflow-wrap: anywhere;
 }
 
 .detail {
-  color: #60717a;
+  color: var(--muted);
   line-height: 1.5;
   font-size: 0.88rem;
 }
 
 .code {
-  font-family: "Menlo", "Monaco", "Courier New", monospace;
+  font-family: var(--font-mono);
   font-size: 0.82rem;
 }
 
 .error {
-  color: #b33d37;
+  color: var(--danger);
 }
 
 .status-dot {
@@ -240,18 +238,18 @@ function formatTraceTime(value: string) {
 }
 
 .tone-success .status-dot {
-  background: #5d9c7b;
+  background: var(--ok);
   box-shadow: 0 0 0 6px rgba(93, 156, 123, 0.16);
 }
 
 .tone-sending .status-dot {
-  background: #d36f55;
+  background: var(--accent);
   box-shadow: 0 0 0 6px rgba(211, 111, 85, 0.16);
   animation: pulse 900ms ease-in-out infinite;
 }
 
 .tone-error .status-dot {
-  background: #b33d37;
+  background: var(--danger);
   box-shadow: 0 0 0 6px rgba(179, 61, 55, 0.16);
 }
 
@@ -263,10 +261,10 @@ function formatTraceTime(value: string) {
 
 .module-pill,
 .tag-list span {
-  border: 1px solid rgba(43, 76, 88, 0.1);
+  border: 1px solid var(--line);
   border-radius: 999px;
   padding: 7px 9px;
-  color: #728189;
+  color: var(--muted);
   background: rgba(255, 255, 255, 0.48);
   font-size: 0.8rem;
   font-weight: 800;
@@ -274,8 +272,8 @@ function formatTraceTime(value: string) {
 }
 
 .module-pill.active {
-  color: #20333c;
-  border-color: rgba(211, 111, 85, 0.32);
+  color: var(--ink);
+  border-color: rgba(200, 95, 73, 0.32);
   background: #fff0e7;
 }
 
@@ -286,7 +284,7 @@ function formatTraceTime(value: string) {
 }
 
 .tag-list span {
-  color: #315f70;
+  color: var(--cyan);
   text-align: left;
 }
 

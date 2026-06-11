@@ -111,15 +111,13 @@ onMounted(() => {
 <style scoped>
 .memory-card {
   display: grid;
-  gap: 14px;
-  padding: 16px;
-  border: 1px solid rgba(43, 76, 88, 0.12);
-  border-radius: 24px;
-  background:
-    linear-gradient(135deg, rgba(255, 253, 248, 0.88), rgba(242, 247, 238, 0.8)),
-    linear-gradient(90deg, rgba(62, 118, 94, 0.06), transparent);
-  box-shadow: 0 16px 34px rgba(43, 76, 88, 0.06);
-  backdrop-filter: blur(14px);
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--panel);
+  box-shadow: var(--shadow-tight);
+  backdrop-filter: blur(12px);
 }
 
 .memory-head,
@@ -145,7 +143,7 @@ h2,
 }
 
 .eyebrow {
-  color: #d36f55;
+  color: var(--accent);
   font-size: 0.72rem;
   font-weight: 900;
   letter-spacing: 0.1em;
@@ -154,7 +152,7 @@ h2,
 
 h2 {
   margin-top: 3px;
-  color: #20333c;
+  color: var(--ink);
   font-size: 1.1rem;
   line-height: 1.2;
 }
@@ -162,10 +160,10 @@ h2 {
 .ghost-button,
 .memory-actions button {
   min-height: 34px;
-  border: 1px solid rgba(43, 76, 88, 0.14);
-  border-radius: 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
   padding: 0 11px;
-  color: #315f70;
+  color: var(--cyan);
   background: rgba(255, 255, 255, 0.48);
   font-weight: 900;
   cursor: pointer;
@@ -183,23 +181,23 @@ h2 {
 
 .memory-metrics span,
 .status-pill {
-  border: 1px solid rgba(43, 76, 88, 0.1);
+  border: 1px solid var(--line);
   border-radius: 999px;
   padding: 6px 8px;
-  color: #315f70;
+  color: var(--cyan);
   background: rgba(255, 255, 255, 0.5);
   font-size: 0.78rem;
   font-weight: 900;
 }
 
 .status-pill.disabled {
-  color: #9a5140;
+  color: var(--warn);
   border-color: rgba(211, 111, 85, 0.24);
   background: rgba(255, 240, 231, 0.8);
 }
 
 .status-pill.active {
-  color: #3e765e;
+  color: var(--ok);
   border-color: rgba(93, 156, 123, 0.24);
   background: rgba(235, 249, 240, 0.82);
 }
@@ -215,8 +213,8 @@ h2 {
   display: grid;
   gap: 7px;
   padding: 10px;
-  border: 1px solid rgba(43, 76, 88, 0.08);
-  border-radius: 14px;
+  border: 1px solid rgba(31, 55, 66, 0.08);
+  border-radius: var(--radius);
   background: rgba(255, 255, 255, 0.42);
 }
 
@@ -226,23 +224,23 @@ h2 {
 
 .memory-row {
   flex-wrap: wrap;
-  color: #60717a;
+  color: var(--muted);
   font-size: 0.8rem;
 }
 
 .memory-row strong {
-  color: #315f70;
+  color: var(--cyan);
 }
 
 .memory-list p {
-  color: #294654;
+  color: var(--ink-soft);
   line-height: 1.45;
   overflow-wrap: anywhere;
 }
 
 .memory-list small,
 .muted-row {
-  color: #60717a;
+  color: var(--muted);
   line-height: 1.45;
 }
 
@@ -251,7 +249,7 @@ h2 {
 }
 
 .error-copy {
-  color: #b33d37;
+  color: var(--danger);
   font-size: 0.88rem;
   line-height: 1.5;
 }

@@ -289,39 +289,29 @@ onMounted(() => {
 <style scoped>
 .workspace-stack {
   display: grid;
-  gap: 14px;
+  gap: 10px;
 }
 
 .workspace-card {
   display: grid;
-  gap: 14px;
-  padding: 16px;
-  border: 1px solid rgba(43, 76, 88, 0.12);
-  border-radius: 24px;
-  background:
-    linear-gradient(135deg, rgba(255, 253, 248, 0.9), rgba(237, 247, 245, 0.82)),
-    linear-gradient(90deg, rgba(211, 111, 85, 0.06), transparent);
-  box-shadow: 0 16px 34px rgba(43, 76, 88, 0.07);
-  backdrop-filter: blur(14px);
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--panel-strong);
+  box-shadow: var(--shadow-tight);
+  backdrop-filter: blur(12px);
 }
 
 .summary-card {
   display: grid;
-  gap: 14px;
-  padding: 16px;
-  border: 1px solid rgba(43, 76, 88, 0.12);
-  border-radius: 24px;
-  background:
-    linear-gradient(135deg, rgba(255, 253, 248, 0.86), rgba(248, 242, 232, 0.82)),
-    repeating-linear-gradient(
-      135deg,
-      rgba(43, 76, 88, 0.035) 0,
-      rgba(43, 76, 88, 0.035) 1px,
-      transparent 1px,
-      transparent 11px
-    );
-  box-shadow: 0 16px 34px rgba(43, 76, 88, 0.06);
-  backdrop-filter: blur(14px);
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--panel);
+  box-shadow: var(--shadow-tight);
+  backdrop-filter: blur(12px);
 }
 
 .workspace-head,
@@ -347,7 +337,7 @@ h2,
 
 .eyebrow,
 .path-field span {
-  color: #d36f55;
+  color: var(--accent);
   font-size: 0.72rem;
   font-weight: 900;
   letter-spacing: 0.1em;
@@ -356,7 +346,7 @@ h2,
 
 h2 {
   margin-top: 3px;
-  color: #20333c;
+  color: var(--ink);
   font-size: 1.1rem;
   line-height: 1.2;
 }
@@ -374,13 +364,13 @@ h2 {
 
 .path-field input {
   width: 100%;
-  min-height: 42px;
-  border: 1px solid rgba(43, 76, 88, 0.14);
-  border-radius: 14px;
+  min-height: 38px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
   padding: 0 12px;
-  color: #20333c;
+  color: var(--ink);
   background: rgba(255, 255, 255, 0.66);
-  font-family: "Menlo", "Monaco", "Courier New", monospace;
+  font-family: var(--font-mono);
   font-size: 0.86rem;
   outline: none;
   transition:
@@ -390,19 +380,19 @@ h2 {
 }
 
 .path-field input:focus {
-  border-color: rgba(211, 111, 85, 0.46);
-  background: #fffdf8;
-  box-shadow: 0 0 0 4px rgba(211, 111, 85, 0.1);
+  border-color: rgba(200, 95, 73, 0.46);
+  background: var(--panel-strong);
+  box-shadow: 0 0 0 3px rgba(200, 95, 73, 0.12);
 }
 
 .connect-button,
 .ghost-button {
-  min-height: 42px;
-  border: 1px solid rgba(43, 76, 88, 0.14);
-  border-radius: 14px;
+  min-height: 38px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
   padding: 0 14px;
-  color: #20333c;
-  background: #fffdf8;
+  color: var(--ink);
+  background: var(--panel-strong);
   font-weight: 900;
   cursor: pointer;
   transition:
@@ -412,15 +402,15 @@ h2 {
 }
 
 .connect-button {
-  color: #fffdf8;
-  border-color: rgba(176, 88, 62, 0.5);
-  background: #d36f55;
+  color: #fffaf1;
+  border-color: rgba(153, 64, 49, 0.42);
+  background: var(--accent);
 }
 
 .connect-button:hover,
 .ghost-button:hover {
   transform: translateY(-1px);
-  border-color: rgba(211, 111, 85, 0.46);
+  border-color: rgba(200, 95, 73, 0.46);
 }
 
 .connect-button:disabled,
@@ -437,8 +427,8 @@ h2 {
 }
 
 .path-value {
-  color: #294654;
-  font-family: "Menlo", "Monaco", "Courier New", monospace;
+  color: var(--ink-soft);
+  font-family: var(--font-mono);
   font-size: 0.82rem;
   overflow-wrap: anywhere;
 }
@@ -448,30 +438,30 @@ h2 {
 }
 
 .status-pill {
-  border: 1px solid rgba(43, 76, 88, 0.12);
+  border: 1px solid var(--line);
   border-radius: 999px;
   padding: 6px 9px;
-  color: #315f70;
+  color: var(--cyan);
   background: rgba(255, 255, 255, 0.52);
   font-size: 0.78rem;
   font-weight: 900;
 }
 
 .status-pill.clean {
-  color: #3e765e;
+  color: var(--ok);
   border-color: rgba(93, 156, 123, 0.24);
   background: rgba(235, 249, 240, 0.82);
 }
 
 .status-pill.dirty {
-  color: #9a5140;
+  color: var(--warn);
   border-color: rgba(211, 111, 85, 0.26);
   background: rgba(255, 240, 231, 0.86);
 }
 
 .status-pill.muted,
 .empty-copy {
-  color: #60717a;
+  color: var(--muted);
 }
 
 .empty-copy,
@@ -481,29 +471,29 @@ h2 {
 }
 
 .error-copy {
-  color: #b33d37;
+  color: var(--danger);
 }
 
 .summary-metrics {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 9px;
+  gap: 8px;
 }
 
 .summary-metrics div {
   display: grid;
   gap: 4px;
   min-width: 0;
-  padding: 10px;
-  border: 1px solid rgba(43, 76, 88, 0.1);
-  border-radius: 16px;
+  padding: 9px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
   background: rgba(255, 255, 255, 0.48);
 }
 
 .summary-metrics span,
 .section-title,
 .compact-list span {
-  color: #d36f55;
+  color: var(--accent);
   font-size: 0.68rem;
   font-weight: 900;
   letter-spacing: 0.08em;
@@ -512,7 +502,7 @@ h2 {
 
 .summary-metrics strong {
   min-width: 0;
-  color: #20333c;
+  color: var(--ink);
   font-size: 0.9rem;
   overflow-wrap: anywhere;
 }
@@ -527,11 +517,15 @@ h2 {
   display: grid;
   gap: 8px;
   min-width: 0;
+  padding: 10px;
+  border: 1px solid rgba(31, 55, 66, 0.08);
+  border-radius: var(--radius);
+  background: rgba(255, 255, 255, 0.28);
 }
 
 .section-title {
   margin: 0;
-  color: #315f70;
+  color: var(--cyan);
 }
 
 .compact-list {
@@ -549,16 +543,16 @@ h2 {
   gap: 8px;
   align-items: start;
   min-width: 0;
-  padding: 8px;
-  border: 1px solid rgba(43, 76, 88, 0.08);
-  border-radius: 14px;
-  background: rgba(255, 255, 255, 0.42);
+  padding: 7px;
+  border: 1px solid rgba(31, 55, 66, 0.08);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.5);
 }
 
 .compact-list code {
   min-width: 0;
-  color: #294654;
-  font-family: "Menlo", "Monaco", "Courier New", monospace;
+  color: var(--ink-soft);
+  font-family: var(--font-mono);
   font-size: 0.76rem;
   line-height: 1.35;
   overflow-wrap: anywhere;
@@ -566,7 +560,7 @@ h2 {
 
 .compact-list .muted-row {
   display: block;
-  color: #60717a;
+  color: var(--muted);
   font-size: 0.84rem;
 }
 

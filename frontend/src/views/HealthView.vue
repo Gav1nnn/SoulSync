@@ -15,27 +15,25 @@
   place-content: center;
   margin: 0;
   padding: 20px;
-  color: #20333c;
+  color: #17252d;
   background:
-    radial-gradient(circle at 20% 20%, rgba(255, 202, 180, 0.56), transparent 22rem),
-    linear-gradient(135deg, #fff8ef, #edf4f1);
-  font-family:
-    "Tsukimi Rounded",
-    "Yuanti SC",
-    "Hiragino Maru Gothic ProN",
-    "PingFang SC",
-    sans-serif;
+    linear-gradient(90deg, rgba(23, 37, 45, 0.055) 1px, transparent 1px),
+    linear-gradient(rgba(23, 37, 45, 0.045) 1px, transparent 1px),
+    linear-gradient(135deg, #f4efe4, #eef3ef);
+  background-size: 28px 28px, 28px 28px, auto;
+  font-family: "Avenir Next", "PingFang SC", "Hiragino Sans GB", sans-serif;
   text-align: center;
 }
 
 .health-card {
   display: grid;
   gap: 0.75rem;
-  padding: 32px;
+  min-width: min(420px, calc(100vw - 40px));
+  padding: 24px;
   border: 1px solid rgba(43, 76, 88, 0.13);
-  border-radius: 28px;
-  background: rgba(255, 253, 248, 0.84);
-  box-shadow: 0 24px 70px rgba(43, 76, 88, 0.11);
+  border-radius: 8px;
+  background: rgba(255, 252, 244, 0.92);
+  box-shadow: 0 18px 48px rgba(34, 52, 60, 0.08);
 }
 
 h1,
@@ -45,16 +43,17 @@ p,
 }
 
 h1 {
-  font-size: clamp(2rem, 8vw, 4rem);
-  letter-spacing: -0.06em;
+  font-family: "Avenir Next Condensed", "DIN Condensed", "PingFang SC", sans-serif;
+  font-size: clamp(1.8rem, 7vw, 3rem);
+  letter-spacing: 0;
 }
 
 p {
-  color: #60717a;
+  color: #657780;
 }
 
 .eyebrow {
-  color: #d36f55;
+  color: #c85f49;
   font-size: 0.76rem;
   font-weight: 900;
   letter-spacing: 0.12em;
