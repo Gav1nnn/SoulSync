@@ -25,6 +25,7 @@ func (s *HTTPServer) Router() *gin.Engine {
 	router.GET("/api/traces/:trace_id", s.trace)
 	router.GET("/api/workspaces/current", s.currentWorkspace)
 	router.GET("/api/workspaces/current/summary", s.currentWorkspaceSummary)
+	router.GET("/api/agent/tasks", s.agentTasks)
 	router.GET("/api/agent/tasks/:id", s.agentTask)
 	router.POST("/api/agent/tasks", s.createAgentTask)
 	router.POST("/api/agent/tasks/:id/retry", s.retryAgentTask)
@@ -253,6 +254,24 @@ func (s *HTTPServer) createAgentTask(c *gin.Context) {
 
 	c.JSON(http.StatusAccepted, gin.H{
 		"task": task,
+	})
+}
+
+func (s *HTTPServer) agentTasks(c *gin.Context) {
+	limit := 20
+	if rawLimit := c.Query("limit"); rawLimit != "" {
+		parsedLimit, err := strconv.Atoi(rawLimit)
+		if err != nil || parsedLimit <= 0 {
+			c.JSON(http.StatusBadRequest, gin.H{
+				"error": "limit must be a positive integer",
+			})
+			return
+		}
+		limit = parsedLimit
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"tasks": s.service.RecentAgentTasks(limit),
 	})
 }
 

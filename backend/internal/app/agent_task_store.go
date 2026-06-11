@@ -2,6 +2,7 @@ package app
 
 import (
 	"fmt"
+	"sort"
 	"sync"
 	"time"
 )
@@ -55,6 +56,31 @@ func (s *AgentTaskStore) Get(id string) (AgentTask, bool) {
 	}
 
 	return cloneAgentTask(task), true
+}
+
+func (s *AgentTaskStore) ListRecent(limit int) []AgentTask {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if limit <= 0 {
+		limit = 20
+	}
+	if limit > 100 {
+		limit = 100
+	}
+
+	tasks := make([]AgentTask, 0, len(s.tasks))
+	for _, task := range s.tasks {
+		tasks = append(tasks, cloneAgentTask(task))
+	}
+	sort.Slice(tasks, func(left int, right int) bool {
+		return tasks[left].UpdatedAt.After(tasks[right].UpdatedAt)
+	})
+	if len(tasks) > limit {
+		return tasks[:limit]
+	}
+
+	return tasks
 }
 
 func (s *AgentTaskStore) Update(id string, update func(*AgentTask)) (AgentTask, bool) {

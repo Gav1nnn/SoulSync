@@ -37,6 +37,13 @@
     ],
     "knowledge": [
       "Vue 页面应使用 script setup 和 ref 管理列表状态。"
+    ],
+    "forbidden_api_paths": [
+      "/api/users",
+      "/api/orders",
+      "/api/products",
+      "/api/invoices",
+      "/api/notifications"
     ]
   },
   {
@@ -77,6 +84,154 @@
     ],
     "knowledge": [
       "Vue 页面应使用 script setup 和 ref 管理列表状态。"
+    ],
+    "forbidden_api_paths": [
+      "/api/users",
+      "/api/orders",
+      "/api/products",
+      "/api/invoices",
+      "/api/notifications"
+    ]
+  },
+  {
+    "id": "gin_products_to_vue_page",
+    "goal": "根据商品列表接口生成前端页面",
+    "api": {
+      "method": "GET",
+      "path": "/api/products",
+      "handler": "listProducts",
+      "handler_file": "backend/main.go"
+    },
+    "frontend_entry": "frontend/src/views/ProductListView.vue",
+    "api_client": "frontend/src/api/products.ts",
+    "type_file": "frontend/src/types/product.ts",
+    "project_docs": [
+      "README.md",
+      "docs/api.md"
+    ],
+    "expected_files": [
+      "frontend/src/types/soulsyncProduct.ts",
+      "frontend/src/api/soulsyncProduct.ts",
+      "frontend/src/views/SoulSyncProductView.vue"
+    ],
+    "required_snippets": [
+      "export type SoulSyncProduct",
+      "fetch(\"/api/products\")",
+      "Loading...",
+      "No data yet."
+    ],
+    "plan": [
+      "读取接口",
+      "生成类型",
+      "生成 API client",
+      "生成页面"
+    ],
+    "memories": [
+      "页面必须包含加载态、错误态和空状态。"
+    ],
+    "knowledge": [
+      "Vue 页面应使用 script setup 和 ref 管理列表状态。"
+    ],
+    "forbidden_api_paths": [
+      "/api/users",
+      "/api/orders",
+      "/api/products",
+      "/api/invoices",
+      "/api/notifications"
+    ]
+  },
+  {
+    "id": "gin_invoices_to_vue_page",
+    "goal": "根据发票列表接口生成 Vue 页面",
+    "api": {
+      "method": "GET",
+      "path": "/api/invoices",
+      "handler": "listInvoices",
+      "handler_file": "backend/main.go"
+    },
+    "frontend_entry": "frontend/src/views/InvoiceListView.vue",
+    "api_client": "frontend/src/api/invoices.ts",
+    "type_file": "frontend/src/types/invoice.ts",
+    "project_docs": [
+      "README.md",
+      "docs/api.md"
+    ],
+    "expected_files": [
+      "frontend/src/types/soulsyncInvoice.ts",
+      "frontend/src/api/soulsyncInvoice.ts",
+      "frontend/src/views/SoulSyncInvoiceView.vue"
+    ],
+    "required_snippets": [
+      "export type SoulSyncInvoice",
+      "fetch(\"/api/invoices\")",
+      "Loading...",
+      "No data yet."
+    ],
+    "plan": [
+      "读取接口",
+      "生成类型",
+      "生成 API client",
+      "生成页面"
+    ],
+    "memories": [
+      "页面必须包含加载态、错误态和空状态。"
+    ],
+    "knowledge": [
+      "Vue 页面应使用 script setup 和 ref 管理列表状态。"
+    ],
+    "forbidden_api_paths": [
+      "/api/users",
+      "/api/orders",
+      "/api/products",
+      "/api/invoices",
+      "/api/notifications"
+    ]
+  },
+  {
+    "id": "gin_notifications_to_vue_page",
+    "goal": "根据通知列表接口生成前端页面",
+    "api": {
+      "method": "GET",
+      "path": "/api/notifications",
+      "handler": "listNotifications",
+      "handler_file": "backend/main.go"
+    },
+    "frontend_entry": "frontend/src/views/NotificationListView.vue",
+    "api_client": "frontend/src/api/notifications.ts",
+    "type_file": "frontend/src/types/notification.ts",
+    "project_docs": [
+      "README.md",
+      "docs/api.md"
+    ],
+    "expected_files": [
+      "frontend/src/types/soulsyncNotification.ts",
+      "frontend/src/api/soulsyncNotification.ts",
+      "frontend/src/views/SoulSyncNotificationView.vue"
+    ],
+    "required_snippets": [
+      "export type SoulSyncNotification",
+      "fetch(\"/api/notifications\")",
+      "Loading...",
+      "No data yet."
+    ],
+    "plan": [
+      "读取接口",
+      "生成类型",
+      "生成 API client",
+      "生成页面"
+    ],
+    "memories": [
+      "页面必须包含加载态、错误态和空状态。"
+    ],
+    "knowledge": [
+      "Vue 页面应使用 script setup 和 ref 管理列表状态。"
+    ],
+    "forbidden_api_paths": [
+      "/api/users",
+      "/api/orders",
+      "/api/products",
+      "/api/invoices",
+      "/api/notifications"
     ]
   }
 ]

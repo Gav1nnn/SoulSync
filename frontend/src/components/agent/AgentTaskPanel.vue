@@ -1,12 +1,20 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref } from "vue";
-import { AgentApiError, createAgentTask, fetchAgentTask, retryAgentTask } from "../../api/agent";
+import { computed, onBeforeUnmount, onMounted, ref } from "vue";
+import {
+  AgentApiError,
+  createAgentTask,
+  fetchAgentTask,
+  fetchAgentTasks,
+  retryAgentTask,
+} from "../../api/agent";
 import type { AgentTask, AgentTaskStatus } from "../../types/agent";
 
 const goalDraft = ref("根据用户列表接口生成前端页面");
 const task = ref<AgentTask | null>(null);
+const recentTasks = ref<AgentTask[]>([]);
 const isSubmitting = ref(false);
 const isRetrying = ref(false);
+const isLoadingRecent = ref(false);
 const errorMessage = ref("");
 let pollTimer: number | null = null;
 
@@ -38,6 +46,7 @@ async function submitTask() {
   try {
     const response = await createAgentTask(goal);
     task.value = response.task;
+    mergeRecentTask(response.task);
     startPolling(response.task.id);
   } catch (error) {
     errorMessage.value =
@@ -59,6 +68,7 @@ async function retryTask() {
   try {
     const response = await retryAgentTask(task.value.id);
     task.value = response.task;
+    mergeRecentTask(response.task);
     startPolling(response.task.id);
   } catch (error) {
     errorMessage.value =
@@ -91,6 +101,7 @@ async function refreshTask(taskId = task.value?.id) {
   try {
     const response = await fetchAgentTask(taskId);
     task.value = response.task;
+    mergeRecentTask(response.task);
     if (response.task.status === "completed" || response.task.status === "failed") {
       stopPolling();
     }
@@ -99,6 +110,41 @@ async function refreshTask(taskId = task.value?.id) {
       error instanceof AgentApiError ? error.message : "任务读取失败。";
     stopPolling();
   }
+}
+
+async function loadRecentTasks() {
+  isLoadingRecent.value = true;
+  errorMessage.value = "";
+
+  try {
+    const response = await fetchAgentTasks(20);
+    recentTasks.value = response.tasks;
+    if (!task.value && response.tasks.length) {
+      task.value = response.tasks[0];
+      if (!["completed", "failed"].includes(response.tasks[0].status)) {
+        startPolling(response.tasks[0].id);
+      }
+    }
+  } catch (error) {
+    errorMessage.value =
+      error instanceof AgentApiError ? error.message : "最近任务读取失败。";
+  } finally {
+    isLoadingRecent.value = false;
+  }
+}
+
+function selectRecentTask(nextTask: AgentTask) {
+  task.value = nextTask;
+  if (["completed", "failed"].includes(nextTask.status)) {
+    stopPolling();
+    return;
+  }
+  startPolling(nextTask.id);
+}
+
+function mergeRecentTask(nextTask: AgentTask) {
+  const rest = recentTasks.value.filter((item) => item.id !== nextTask.id);
+  recentTasks.value = [nextTask, ...rest].slice(0, 20);
 }
 
 function formatTime(value: string) {
@@ -113,6 +159,10 @@ function formatTime(value: string) {
     second: "2-digit",
   });
 }
+
+onMounted(() => {
+  void loadRecentTasks();
+});
 
 onBeforeUnmount(() => {
   stopPolling();
@@ -140,6 +190,28 @@ onBeforeUnmount(() => {
         {{ isSubmitting ? "创建中" : "创建任务" }}
       </button>
     </form>
+
+    <section class="task-section" v-if="recentTasks.length || isLoadingRecent">
+      <div class="section-row">
+        <p class="section-title">Recent Tasks</p>
+        <button class="ghost-button" type="button" :disabled="isLoadingRecent" @click="loadRecentTasks">
+          {{ isLoadingRecent ? "刷新中" : "刷新" }}
+        </button>
+      </div>
+      <ul class="recent-task-list">
+        <li v-for="item in recentTasks.slice(0, 5)" :key="item.id">
+          <button
+            type="button"
+            :class="{ active: task?.id === item.id }"
+            @click="selectRecentTask(item)"
+          >
+            <span :class="`status-dot status-${item.status}`" />
+            <strong>{{ item.goal }}</strong>
+            <small>{{ formatTime(item.updated_at) }}</small>
+          </button>
+        </li>
+      </ul>
+    </section>
 
     <template v-if="task">
       <div class="task-meta">
@@ -438,10 +510,35 @@ h2 {
   gap: 8px;
 }
 
+.section-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.ghost-button {
+  min-height: 30px;
+  border: 1px solid rgba(43, 76, 88, 0.12);
+  border-radius: 10px;
+  padding: 0 10px;
+  color: #315f70;
+  background: rgba(255, 255, 255, 0.48);
+  font-size: 0.76rem;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.ghost-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.58;
+}
+
 .plan-list,
 .log-list,
 .file-list,
 .step-list,
+.recent-task-list,
 .compact-list {
   display: grid;
   gap: 7px;
@@ -461,9 +558,65 @@ h2 {
 
 .log-list,
 .file-list,
-.step-list {
+.step-list,
+.recent-task-list {
   padding-left: 0;
   list-style: none;
+}
+
+.recent-task-list button {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+  width: 100%;
+  min-height: 38px;
+  border: 1px solid rgba(43, 76, 88, 0.08);
+  border-radius: 12px;
+  padding: 8px 9px;
+  color: #294654;
+  background: rgba(255, 255, 255, 0.36);
+  cursor: pointer;
+  text-align: left;
+}
+
+.recent-task-list button.active {
+  border-color: rgba(211, 111, 85, 0.24);
+  background: rgba(255, 240, 231, 0.58);
+}
+
+.recent-task-list strong {
+  overflow: hidden;
+  font-size: 0.84rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.recent-task-list small {
+  color: #60717a;
+  font-size: 0.74rem;
+  font-weight: 800;
+}
+
+.status-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 999px;
+  background: #60717a;
+}
+
+.status-dot.status-completed {
+  background: #3e765e;
+}
+
+.status-dot.status-failed {
+  background: #b33d37;
+}
+
+.status-dot.status-planning,
+.status-dot.status-running,
+.status-dot.status-verifying {
+  background: #d36f55;
 }
 
 .file-list li {

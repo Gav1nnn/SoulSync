@@ -210,7 +210,7 @@ def contextual_relevancy_score(case: dict, generated: dict[str, str]) -> float:
 def faithfulness_score(case: dict, generated: dict[str, str]) -> float:
     api = case["api"]
     combined_output = "\n".join(generated.values())
-    forbidden_paths = ["/api/users", "/api/orders"]
+    forbidden_paths = case.get("forbidden_api_paths", ["/api/users", "/api/orders"])
     other_paths = [path for path in forbidden_paths if path != api["path"]]
     if any(path in combined_output for path in other_paths):
         return 0.0

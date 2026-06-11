@@ -235,6 +235,10 @@ func (s *Service) AgentTask(id string) (AgentTask, error) {
 	return task, nil
 }
 
+func (s *Service) RecentAgentTasks(limit int) []AgentTask {
+	return s.agentTaskStore.ListRecent(limit)
+}
+
 func (s *Service) runAgentTask(taskID string) {
 	s.transitionAgentTask(taskID, AgentTaskPlanning, "Python planner is reading workspace summary.")
 

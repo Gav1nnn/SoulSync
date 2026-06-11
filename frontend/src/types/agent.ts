@@ -84,3 +84,7 @@ export type AgentTask = {
 export type AgentTaskResponse = {
   task: AgentTask;
 };
+
+export type AgentTasksResponse = {
+  tasks: AgentTask[];
+};

@@ -681,6 +681,86 @@ func TestCreateAgentTaskRunsPlannerLifecycle(t *testing.T) {
 	}
 }
 
+func TestListAgentTasksReturnsRecentTasks(t *testing.T) {
+	aiClient := NewAIClientWithHTTPClient("http://ai-engine.local", &http.Client{
+		Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
+			switch r.URL.Path {
+			case "/agent/plan":
+				return &http.Response{
+					StatusCode: http.StatusOK,
+					Header:     http.Header{"Content-Type": []string{"application/json"}},
+					Body: io.NopCloser(bytes.NewBufferString(
+						`{"plan":["读取用户接口"],"files_to_read":["backend/main.go"],"initial_action":{"type":"read_file","path":"backend/main.go","reason":"先确认接口定义"},"context_used":["persona","workspace.summary","mock_planner"],"used_memory_ids":[],"used_knowledge_chunk_ids":[],"planner":"mock_planner"}`,
+					)),
+				}, nil
+			case "/agent/step":
+				return &http.Response{
+					StatusCode: http.StatusOK,
+					Header:     http.Header{"Content-Type": []string{"application/json"}},
+					Body: io.NopCloser(bytes.NewBufferString(
+						`{"summary":"完成","action":{"type":"finish","reason":"read-only completed"},"context_used":["persona","workspace.summary","agent.observation","mock_stepper"],"stepper":"mock_stepper"}`,
+					)),
+				}, nil
+			default:
+				t.Fatalf("unexpected request: %s %s", r.Method, r.URL.Path)
+			}
+			return nil, nil
+		}),
+	})
+	server := NewHTTPServer(newTestService(t, aiClient)).Router()
+	workspacePath := newFrontendBackendFixture(t)
+
+	connectBody := bytes.NewBufferString(`{"path":"` + workspacePath + `"}`)
+	connectRequest := httptest.NewRequest(http.MethodPost, "/api/workspaces", connectBody)
+	connectRequest.Header.Set("Content-Type", "application/json")
+	connectRecorder := httptest.NewRecorder()
+	server.ServeHTTP(connectRecorder, connectRequest)
+	if connectRecorder.Code != http.StatusOK {
+		t.Fatalf("expected connect status 200, got %d: %s", connectRecorder.Code, connectRecorder.Body.String())
+	}
+
+	body := bytes.NewBufferString(`{"goal":"根据用户列表接口生成 Vue 页面"}`)
+	request := httptest.NewRequest(http.MethodPost, "/api/agent/tasks", body)
+	request.Header.Set("Content-Type", "application/json")
+	recorder := httptest.NewRecorder()
+	server.ServeHTTP(recorder, request)
+	if recorder.Code != http.StatusAccepted {
+		t.Fatalf("expected status 202, got %d: %s", recorder.Code, recorder.Body.String())
+	}
+
+	var createdResponse struct {
+		Task AgentTask `json:"task"`
+	}
+	if err := json.Unmarshal(recorder.Body.Bytes(), &createdResponse); err != nil {
+		t.Fatalf("decode created task response: %v", err)
+	}
+	task := waitForAgentTaskStatus(t, server, createdResponse.Task.ID, AgentTaskCompleted)
+
+	listRequest := httptest.NewRequest(http.MethodGet, "/api/agent/tasks?limit=1", nil)
+	listRecorder := httptest.NewRecorder()
+	server.ServeHTTP(listRecorder, listRequest)
+	if listRecorder.Code != http.StatusOK {
+		t.Fatalf("expected list status 200, got %d: %s", listRecorder.Code, listRecorder.Body.String())
+	}
+
+	var listResponse struct {
+		Tasks []AgentTask `json:"tasks"`
+	}
+	if err := json.Unmarshal(listRecorder.Body.Bytes(), &listResponse); err != nil {
+		t.Fatalf("decode task list response: %v", err)
+	}
+	if len(listResponse.Tasks) != 1 || listResponse.Tasks[0].ID != task.ID {
+		t.Fatalf("expected recent task %s, got %#v", task.ID, listResponse.Tasks)
+	}
+
+	badLimitRequest := httptest.NewRequest(http.MethodGet, "/api/agent/tasks?limit=bad", nil)
+	badLimitRecorder := httptest.NewRecorder()
+	server.ServeHTTP(badLimitRecorder, badLimitRequest)
+	if badLimitRecorder.Code != http.StatusBadRequest {
+		t.Fatalf("expected bad limit status 400, got %d", badLimitRecorder.Code)
+	}
+}
+
 func TestCreateAgentTaskWritesGeneratedFrontendFiles(t *testing.T) {
 	stepCalls := 0
 	aiClient := NewAIClientWithHTTPClient("http://ai-engine.local", &http.Client{
