@@ -88,3 +88,37 @@ export type AgentTaskResponse = {
 export type AgentTasksResponse = {
   tasks: AgentTask[];
 };
+
+export type AgentTaskTraceEvent = {
+  index: number;
+  kind: string;
+  status: string;
+  title: string;
+  summary: string;
+  action?: AgentPlanAction;
+  observation?: AgentObservation;
+  context_used: string[];
+  started_at: string;
+  finished_at: string;
+  duration_ms: number;
+};
+
+export type AgentTaskTrace = {
+  task_id: string;
+  goal: string;
+  status: AgentTaskStatus;
+  branch_name?: string;
+  planner?: string;
+  planner_context_used: string[];
+  events: AgentTaskTraceEvent[];
+  changed_files: string[];
+  verification?: AgentVerification;
+  result?: AgentTaskResult;
+  started_at: string;
+  finished_at?: string;
+  duration_ms: number;
+};
+
+export type AgentTaskTraceResponse = {
+  trace: AgentTaskTrace;
+};

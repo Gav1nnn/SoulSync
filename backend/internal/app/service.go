@@ -235,6 +235,15 @@ func (s *Service) AgentTask(id string) (AgentTask, error) {
 	return task, nil
 }
 
+func (s *Service) AgentTaskTrace(id string) (AgentTaskTrace, error) {
+	task, err := s.AgentTask(id)
+	if err != nil {
+		return AgentTaskTrace{}, err
+	}
+
+	return buildAgentTaskTrace(task), nil
+}
+
 func (s *Service) RecentAgentTasks(limit int) []AgentTask {
 	return s.agentTaskStore.ListRecent(limit)
 }
@@ -543,6 +552,132 @@ func workspaceSummaryContext(summary WorkspaceSummary) []string {
 	}
 
 	return context
+}
+
+func buildAgentTaskTrace(task AgentTask) AgentTaskTrace {
+	events := make([]AgentTaskTraceEvent, 0, len(task.Steps)+2)
+	eventIndex := 1
+	if len(task.Plan) > 0 || task.Planner != "" || len(task.PlannerContextUsed) > 0 {
+		title := "Planner"
+		if task.Planner != "" {
+			title = "Planner " + task.Planner
+		}
+		events = append(events, AgentTaskTraceEvent{
+			Index:       eventIndex,
+			Kind:        "planning",
+			Status:      string(AgentTaskPlanning),
+			Title:       title,
+			Summary:     fmt.Sprintf("Produced %d plan steps and %d read candidates.", len(task.Plan), len(task.FilesToRead)),
+			ContextUsed: append([]string{}, task.PlannerContextUsed...),
+			StartedAt:   task.CreatedAt,
+			FinishedAt:  firstStepStartOrUpdatedAt(task),
+			DurationMS:  nonNegativeDurationMS(task.CreatedAt, firstStepStartOrUpdatedAt(task)),
+		})
+		eventIndex++
+	}
+
+	for _, step := range task.Steps {
+		action := step.Action
+		observation := step.Observation
+		events = append(events, AgentTaskTraceEvent{
+			Index:       eventIndex,
+			Kind:        "action",
+			Status:      observation.Status,
+			Title:       fmt.Sprintf("Step %d %s", step.Index, action.Type),
+			Summary:     step.Summary,
+			Action:      &action,
+			Observation: sanitizedAgentObservation(observation),
+			ContextUsed: append([]string{}, step.ContextUsed...),
+			StartedAt:   step.StartedAt,
+			FinishedAt:  step.FinishedAt,
+			DurationMS:  step.DurationMS,
+		})
+		eventIndex++
+	}
+
+	if task.Verification != nil {
+		status := task.Verification.Status
+		events = append(events, AgentTaskTraceEvent{
+			Index:      eventIndex,
+			Kind:       "verification",
+			Status:     status,
+			Title:      "Verification",
+			Summary:    "Command " + status + ": " + task.Verification.Command,
+			StartedAt:  task.UpdatedAt,
+			FinishedAt: task.UpdatedAt,
+			DurationMS: 0,
+		})
+	}
+
+	finishedAt := task.CompletedAt
+	durationMS := nonNegativeDurationMS(task.CreatedAt, task.UpdatedAt)
+	if finishedAt != nil {
+		durationMS = nonNegativeDurationMS(task.CreatedAt, *finishedAt)
+	}
+
+	return AgentTaskTrace{
+		TaskID:             task.ID,
+		Goal:               task.Goal,
+		Status:             task.Status,
+		BranchName:         task.BranchName,
+		Planner:            task.Planner,
+		PlannerContextUsed: append([]string{}, task.PlannerContextUsed...),
+		Events:             events,
+		ChangedFiles:       append([]string{}, task.ChangedFiles...),
+		Verification:       cloneAgentVerification(task.Verification),
+		Result:             cloneAgentTaskResult(task.Result),
+		StartedAt:          task.CreatedAt,
+		FinishedAt:         cloneTimePointer(finishedAt),
+		DurationMS:         durationMS,
+	}
+}
+
+func firstStepStartOrUpdatedAt(task AgentTask) time.Time {
+	if len(task.Steps) > 0 && !task.Steps[0].StartedAt.IsZero() {
+		return task.Steps[0].StartedAt
+	}
+	return task.UpdatedAt
+}
+
+func nonNegativeDurationMS(start time.Time, finish time.Time) int64 {
+	if start.IsZero() || finish.IsZero() || finish.Before(start) {
+		return 0
+	}
+	return finish.Sub(start).Milliseconds()
+}
+
+func sanitizedAgentObservation(observation AgentObservation) *AgentObservation {
+	next := observation
+	if next.Content != "" {
+		next.Content = truncateText(next.Content, 1200)
+	}
+	return &next
+}
+
+func cloneAgentVerification(verification *AgentVerification) *AgentVerification {
+	if verification == nil {
+		return nil
+	}
+	next := *verification
+	next.Output = append([]string{}, verification.Output...)
+	return &next
+}
+
+func cloneAgentTaskResult(result *AgentTaskResult) *AgentTaskResult {
+	if result == nil {
+		return nil
+	}
+	next := *result
+	next.NextSuggestions = append([]string{}, result.NextSuggestions...)
+	return &next
+}
+
+func cloneTimePointer(value *time.Time) *time.Time {
+	if value == nil {
+		return nil
+	}
+	next := *value
+	return &next
 }
 
 func readWorkspace(rawPath string) (Workspace, error) {

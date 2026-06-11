@@ -675,6 +675,33 @@ func TestCreateAgentTaskRunsPlannerLifecycle(t *testing.T) {
 	if len(task.ChangedFiles) != 0 {
 		t.Fatalf("expected no changed files in read-only stepper stage: %#v", task.ChangedFiles)
 	}
+	traceRequest := httptest.NewRequest(http.MethodGet, "/api/agent/tasks/"+task.ID+"/trace", nil)
+	traceRecorder := httptest.NewRecorder()
+	server.ServeHTTP(traceRecorder, traceRequest)
+	if traceRecorder.Code != http.StatusOK {
+		t.Fatalf("expected trace status 200, got %d: %s", traceRecorder.Code, traceRecorder.Body.String())
+	}
+	var traceResponse struct {
+		Trace AgentTaskTrace `json:"trace"`
+	}
+	if err := json.Unmarshal(traceRecorder.Body.Bytes(), &traceResponse); err != nil {
+		t.Fatalf("decode task trace response: %v", err)
+	}
+	if traceResponse.Trace.TaskID != task.ID || traceResponse.Trace.Goal != task.Goal {
+		t.Fatalf("expected trace to describe task: %#v", traceResponse.Trace)
+	}
+	if len(traceResponse.Trace.Events) < 3 {
+		t.Fatalf("expected planner, action, and verification events: %#v", traceResponse.Trace.Events)
+	}
+	if traceResponse.Trace.Events[0].Kind != "planning" || traceResponse.Trace.Events[1].Kind != "action" {
+		t.Fatalf("unexpected trace event order: %#v", traceResponse.Trace.Events)
+	}
+	if traceResponse.Trace.Events[1].Action == nil || traceResponse.Trace.Events[1].Observation == nil {
+		t.Fatalf("expected action event details: %#v", traceResponse.Trace.Events[1])
+	}
+	if traceResponse.Trace.Verification == nil || traceResponse.Trace.Verification.Status != "skipped" {
+		t.Fatalf("expected trace verification: %#v", traceResponse.Trace.Verification)
+	}
 	currentBranch := strings.TrimSpace(runTestGitOutput(t, workspacePath, "branch", "--show-current"))
 	if currentBranch != task.BranchName {
 		t.Fatalf("expected task branch %q, got %q", task.BranchName, currentBranch)

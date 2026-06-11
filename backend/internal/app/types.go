@@ -278,6 +278,36 @@ type AgentTaskResult struct {
 	NextSuggestions []string `json:"next_suggestions"`
 }
 
+type AgentTaskTrace struct {
+	TaskID             string                `json:"task_id"`
+	Goal               string                `json:"goal"`
+	Status             AgentTaskStatus       `json:"status"`
+	BranchName         string                `json:"branch_name,omitempty"`
+	Planner            string                `json:"planner,omitempty"`
+	PlannerContextUsed []string              `json:"planner_context_used"`
+	Events             []AgentTaskTraceEvent `json:"events"`
+	ChangedFiles       []string              `json:"changed_files"`
+	Verification       *AgentVerification    `json:"verification,omitempty"`
+	Result             *AgentTaskResult      `json:"result,omitempty"`
+	StartedAt          time.Time             `json:"started_at"`
+	FinishedAt         *time.Time            `json:"finished_at,omitempty"`
+	DurationMS         int64                 `json:"duration_ms"`
+}
+
+type AgentTaskTraceEvent struct {
+	Index       int               `json:"index"`
+	Kind        string            `json:"kind"`
+	Status      string            `json:"status"`
+	Title       string            `json:"title"`
+	Summary     string            `json:"summary"`
+	Action      *AgentAction      `json:"action,omitempty"`
+	Observation *AgentObservation `json:"observation,omitempty"`
+	ContextUsed []string          `json:"context_used"`
+	StartedAt   time.Time         `json:"started_at"`
+	FinishedAt  time.Time         `json:"finished_at"`
+	DurationMS  int64             `json:"duration_ms"`
+}
+
 type Memory struct {
 	ID              string    `json:"id"`
 	Type            string    `json:"type"`

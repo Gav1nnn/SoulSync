@@ -4,17 +4,20 @@ import {
   AgentApiError,
   createAgentTask,
   fetchAgentTask,
+  fetchAgentTaskTrace,
   fetchAgentTasks,
   retryAgentTask,
 } from "../../api/agent";
-import type { AgentTask, AgentTaskStatus } from "../../types/agent";
+import type { AgentTask, AgentTaskStatus, AgentTaskTrace } from "../../types/agent";
 
 const goalDraft = ref("根据用户列表接口生成前端页面");
 const task = ref<AgentTask | null>(null);
+const taskTrace = ref<AgentTaskTrace | null>(null);
 const recentTasks = ref<AgentTask[]>([]);
 const isSubmitting = ref(false);
 const isRetrying = ref(false);
 const isLoadingRecent = ref(false);
+const isTraceLoading = ref(false);
 const errorMessage = ref("");
 let pollTimer: number | null = null;
 
@@ -46,6 +49,7 @@ async function submitTask() {
   try {
     const response = await createAgentTask(goal);
     task.value = response.task;
+    taskTrace.value = null;
     mergeRecentTask(response.task);
     startPolling(response.task.id);
   } catch (error) {
@@ -68,6 +72,7 @@ async function retryTask() {
   try {
     const response = await retryAgentTask(task.value.id);
     task.value = response.task;
+    taskTrace.value = null;
     mergeRecentTask(response.task);
     startPolling(response.task.id);
   } catch (error) {
@@ -102,6 +107,7 @@ async function refreshTask(taskId = task.value?.id) {
     const response = await fetchAgentTask(taskId);
     task.value = response.task;
     mergeRecentTask(response.task);
+    void loadTaskTrace(response.task.id);
     if (response.task.status === "completed" || response.task.status === "failed") {
       stopPolling();
     }
@@ -121,6 +127,7 @@ async function loadRecentTasks() {
     recentTasks.value = response.tasks;
     if (!task.value && response.tasks.length) {
       task.value = response.tasks[0];
+      void loadTaskTrace(response.tasks[0].id);
       if (!["completed", "failed"].includes(response.tasks[0].status)) {
         startPolling(response.tasks[0].id);
       }
@@ -135,6 +142,7 @@ async function loadRecentTasks() {
 
 function selectRecentTask(nextTask: AgentTask) {
   task.value = nextTask;
+  void loadTaskTrace(nextTask.id);
   if (["completed", "failed"].includes(nextTask.status)) {
     stopPolling();
     return;
@@ -145,6 +153,22 @@ function selectRecentTask(nextTask: AgentTask) {
 function mergeRecentTask(nextTask: AgentTask) {
   const rest = recentTasks.value.filter((item) => item.id !== nextTask.id);
   recentTasks.value = [nextTask, ...rest].slice(0, 20);
+}
+
+async function loadTaskTrace(taskId = task.value?.id) {
+  if (!taskId || isTraceLoading.value) {
+    return;
+  }
+
+  isTraceLoading.value = true;
+  try {
+    const response = await fetchAgentTaskTrace(taskId);
+    taskTrace.value = response.trace;
+  } catch {
+    taskTrace.value = null;
+  } finally {
+    isTraceLoading.value = false;
+  }
 }
 
 function formatTime(value: string) {
@@ -158,6 +182,10 @@ function formatTime(value: string) {
     minute: "2-digit",
     second: "2-digit",
   });
+}
+
+function eventTarget(event: AgentTaskTrace["events"][number]) {
+  return event.action?.path || event.action?.query || event.action?.command || "";
 }
 
 onMounted(() => {
@@ -243,6 +271,37 @@ onBeforeUnmount(() => {
             </li>
           </ul>
         </div>
+      </section>
+
+      <section class="task-section">
+        <div class="section-row">
+          <p class="section-title">Trace Timeline</p>
+          <button class="ghost-button" type="button" :disabled="isTraceLoading" @click="loadTaskTrace()">
+            {{ isTraceLoading ? "同步中" : "同步" }}
+          </button>
+        </div>
+        <div v-if="taskTrace" class="trace-summary">
+          <span>{{ taskTrace.events.length }} events</span>
+          <span>{{ taskTrace.duration_ms }}ms</span>
+          <code v-if="taskTrace.branch_name">{{ taskTrace.branch_name }}</code>
+        </div>
+        <ol v-if="taskTrace?.events.length" class="trace-list">
+          <li v-for="event in taskTrace.events" :key="`${event.kind}-${event.index}`">
+            <div class="trace-head">
+              <strong>#{{ event.index }} {{ event.title }}</strong>
+              <span>{{ event.status }}</span>
+              <small>{{ event.duration_ms }}ms</small>
+            </div>
+            <code v-if="eventTarget(event)">{{ eventTarget(event) }}</code>
+            <p>{{ event.summary || event.observation?.message }}</p>
+            <div v-if="event.context_used.length" class="tag-list compact-tags">
+              <span v-for="item in event.context_used" :key="`${event.index}-${item}`">{{ item }}</span>
+            </div>
+          </li>
+        </ol>
+        <p v-else class="muted-row">
+          {{ isTraceLoading ? "正在同步任务 Trace。" : "等待任务 Trace。" }}
+        </p>
       </section>
 
       <section class="task-section">
@@ -536,6 +595,7 @@ h2 {
 .log-list,
 .file-list,
 .step-list,
+.trace-list,
 .recent-task-list,
 .compact-list {
   display: grid;
@@ -548,6 +608,7 @@ h2 {
 .log-list li,
 .file-list li,
 .step-list li,
+.trace-list li,
 .verification-box {
   color: var(--ink-soft);
   line-height: 1.45;
@@ -557,9 +618,77 @@ h2 {
 .log-list,
 .file-list,
 .step-list,
+.trace-list,
 .recent-task-list {
   padding-left: 0;
   list-style: none;
+}
+
+.trace-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  align-items: center;
+}
+
+.trace-summary span,
+.trace-summary code {
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 5px 8px;
+  color: var(--cyan);
+  background: rgba(255, 255, 255, 0.5);
+  font-family: inherit;
+  font-size: 0.76rem;
+  font-weight: 900;
+}
+
+.trace-summary code {
+  color: var(--ink-soft);
+  font-family: var(--font-mono);
+  overflow-wrap: anywhere;
+}
+
+.trace-list li {
+  display: grid;
+  gap: 7px;
+  padding: 10px;
+  border: 1px solid rgba(31, 55, 66, 0.08);
+  border-left: 3px solid rgba(47, 113, 130, 0.34);
+  border-radius: var(--radius);
+  background: rgba(255, 255, 255, 0.42);
+}
+
+.trace-head {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 8px;
+  align-items: center;
+}
+
+.trace-head strong {
+  color: var(--ink);
+  font-size: 0.84rem;
+  overflow-wrap: anywhere;
+}
+
+.trace-head span,
+.trace-head small {
+  color: var(--muted);
+  font-size: 0.76rem;
+  font-weight: 900;
+}
+
+.trace-list code {
+  color: var(--ink-soft);
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  overflow-wrap: anywhere;
+}
+
+.trace-list p {
+  margin: 0;
+  color: var(--muted);
 }
 
 .recent-task-list button {
@@ -812,6 +941,10 @@ h2 {
   }
 
   .log-list li {
+    grid-template-columns: 1fr;
+  }
+
+  .trace-head {
     grid-template-columns: 1fr;
   }
 }
