@@ -3,7 +3,8 @@ from pathlib import Path
 from unittest.mock import patch
 
 from app.llm.client import LLMClientError, current_provider, filter_memory_candidates, load_settings
-from app.orchestration.agent_plan import generate_agent_plan
+from app.orchestration.agent_plan import build_workspace_context, generate_agent_plan
+from app.orchestration.agent_step import generate_agent_step
 from app.orchestration.generate_reply import generate_reply
 from app.persona.examples import berry_few_shot_messages
 from app.persona.profile import PersonaProfile, default_berry_persona
@@ -15,10 +16,15 @@ from app.retrieval.retriever import retrieve_knowledge_result, tokenize
 from app.retrieval.schemas import RetrievalHit, RetrievalResult
 from app.schemas import (
     AgentPlanRequest,
+    AgentStepRequest,
+    AgentObservation,
+    AgentReadFile,
+    APICandidate,
     GenerateRequest,
     MemoryCandidate,
     MemoryContext,
     ConversationMessage,
+    ProjectDocSnippet,
     WorkspaceCandidate,
     WorkspaceSummary,
 )
@@ -49,6 +55,19 @@ class PersonaFlowTests(unittest.TestCase):
                 backend_route_candidates=[
                     WorkspaceCandidate(path="backend/main.go", kind="go.gin.routes", reason="route")
                 ],
+                api_candidates=[
+                    APICandidate(method="GET", path="/api/users", handler="listUsers", handler_file="backend/main.go")
+                ],
+                project_doc_candidates=[
+                    WorkspaceCandidate(path="README.md", kind="project.readme", reason="docs")
+                ],
+                project_doc_snippets=[
+                    ProjectDocSnippet(
+                        path="README.md",
+                        kind="project.readme",
+                        content="Use existing Vue views and API clients.",
+                    )
+                ],
                 api_client_candidates=[
                     WorkspaceCandidate(path="frontend/src/api/users.ts", kind="frontend.api_client", reason="api")
                 ],
@@ -75,6 +94,185 @@ class PersonaFlowTests(unittest.TestCase):
         self.assertEqual(response.initial_action.type, "read_file")
         self.assertEqual(response.initial_action.path, "backend/main.go")
         self.assertIn("frontend/src/api/users.ts", response.files_to_read)
+
+    def test_agent_plan_workspace_context_includes_project_doc_snippets(self) -> None:
+        request = AgentPlanRequest(
+            goal="根据用户列表接口生成页面",
+            workspace_summary=WorkspaceSummary(
+                workspace_path="/tmp/project",
+                root_name="project",
+                project_doc_candidates=[
+                    WorkspaceCandidate(path="README.md", kind="project.readme", reason="docs")
+                ],
+                project_doc_snippets=[
+                    ProjectDocSnippet(
+                        path="README.md",
+                        kind="project.readme",
+                        content="Use existing Vue views and API clients.",
+                    )
+                ],
+            ),
+        )
+
+        context = build_workspace_context(request)
+
+        self.assertIn("Project doc snippets", context)
+        self.assertIn("Use existing Vue views and API clients.", context)
+
+    @patch("app.orchestration.agent_step.generate_llm_agent_step")
+    def test_agent_step_fallback_reads_then_generates_frontend_files(
+        self,
+        mock_generate_llm_agent_step,
+    ) -> None:
+        mock_generate_llm_agent_step.side_effect = LLMClientError("llm disabled")
+        workspace_summary = WorkspaceSummary(
+            workspace_path="/tmp/project",
+            root_name="project",
+            backend_route_candidates=[
+                WorkspaceCandidate(path="backend/main.go", kind="go.gin.routes", reason="route")
+            ],
+            api_candidates=[
+                APICandidate(method="GET", path="/api/users", handler="listUsers", handler_file="backend/main.go")
+            ],
+            project_doc_candidates=[
+                WorkspaceCandidate(path="README.md", kind="project.readme", reason="docs")
+            ],
+            project_doc_snippets=[
+                ProjectDocSnippet(
+                    path="README.md",
+                    kind="project.readme",
+                    content="Use existing Vue views and API clients.",
+                )
+            ],
+            api_client_candidates=[
+                WorkspaceCandidate(path="frontend/src/api/users.ts", kind="frontend.api_client", reason="api")
+            ],
+        )
+
+        response = generate_agent_step(
+            AgentStepRequest(
+                goal="根据用户列表接口生成页面",
+                plan=["读取接口", "读取 API client"],
+                workspace_summary=workspace_summary,
+                step_index=2,
+                previous_observation=AgentObservation(
+                    status="ok",
+                    message="Read 100 bytes.",
+                    path="backend/main.go",
+                    content="router.GET('/users', listUsers)",
+                ),
+                read_files=[
+                    AgentReadFile(path="backend/main.go", content="router.GET('/users', listUsers)")
+                ],
+            )
+        )
+
+        self.assertEqual(response.stepper, "mock_stepper")
+        self.assertIn("agent.read_files", response.context_used)
+        self.assertEqual(response.action.type, "read_file")
+        self.assertEqual(response.action.path, "frontend/src/api/users.ts")
+
+        type_response = generate_agent_step(
+            AgentStepRequest(
+                goal="根据用户列表接口生成页面",
+                plan=["读取接口", "读取 API client"],
+                workspace_summary=workspace_summary,
+                step_index=3,
+                previous_observation=AgentObservation(
+                    status="ok",
+                    message="Read 80 bytes.",
+                    path="frontend/src/api/users.ts",
+                    content="export function listUsers() {}",
+                ),
+                read_files=[
+                    AgentReadFile(path="backend/main.go", content="router.GET('/users', listUsers)"),
+                    AgentReadFile(path="frontend/src/api/users.ts", content="export function listUsers() {}"),
+                ],
+            )
+        )
+
+        self.assertEqual(type_response.action.type, "write_file")
+        self.assertEqual(type_response.action.path, "frontend/src/types/soulsyncUser.ts")
+        self.assertIn("export type SoulSyncUser", type_response.action.content or "")
+
+        client_response = generate_agent_step(
+            AgentStepRequest(
+                goal="根据用户列表接口生成页面",
+                plan=["读取接口", "读取 API client"],
+                workspace_summary=workspace_summary,
+                step_index=4,
+                previous_observation=AgentObservation(
+                    status="ok",
+                    message="Wrote 120 bytes.",
+                    path="frontend/src/types/soulsyncUser.ts",
+                ),
+                read_files=[
+                    AgentReadFile(path="backend/main.go", content="router.GET('/users', listUsers)"),
+                    AgentReadFile(path="frontend/src/api/users.ts", content="export function listUsers() {}"),
+                ],
+                changed_files=["frontend/src/types/soulsyncUser.ts"],
+            )
+        )
+
+        self.assertEqual(client_response.action.type, "write_file")
+        self.assertEqual(client_response.action.path, "frontend/src/api/soulsyncUser.ts")
+        self.assertIn('fetch("/api/users")', client_response.action.content or "")
+
+        view_response = generate_agent_step(
+            AgentStepRequest(
+                goal="根据用户列表接口生成页面",
+                plan=["读取接口", "读取 API client"],
+                workspace_summary=workspace_summary,
+                step_index=5,
+                previous_observation=AgentObservation(
+                    status="ok",
+                    message="Wrote 180 bytes.",
+                    path="frontend/src/api/soulsyncUser.ts",
+                ),
+                read_files=[
+                    AgentReadFile(path="backend/main.go", content="router.GET('/users', listUsers)"),
+                    AgentReadFile(path="frontend/src/api/users.ts", content="export function listUsers() {}"),
+                ],
+                changed_files=[
+                    "frontend/src/types/soulsyncUser.ts",
+                    "frontend/src/api/soulsyncUser.ts",
+                ],
+            )
+        )
+
+        self.assertEqual(view_response.action.type, "write_file")
+        self.assertEqual(view_response.action.path, "frontend/src/views/SoulSyncUserView.vue")
+        self.assertIn("Loading...", view_response.action.content or "")
+
+        finish_response = generate_agent_step(
+            AgentStepRequest(
+                goal="根据用户列表接口生成页面",
+                plan=["读取接口", "读取 API client"],
+                workspace_summary=workspace_summary,
+                step_index=6,
+                previous_observation=AgentObservation(
+                    status="ok",
+                    message="Wrote 900 bytes.",
+                    path="frontend/src/views/SoulSyncUserView.vue",
+                ),
+                changed_files=[
+                    "frontend/src/types/soulsyncUser.ts",
+                    "frontend/src/api/soulsyncUser.ts",
+                    "frontend/src/views/SoulSyncUserView.vue",
+                ],
+            )
+        )
+
+        self.assertEqual(finish_response.action.type, "finish")
+        self.assertIn("改动 3 个文件", finish_response.summary)
+
+    def test_agent_eval_cases_pass_locally(self) -> None:
+        from evals.run_agent_eval import evaluate_case, load_cases
+
+        results = [evaluate_case(case) for case in load_cases()]
+
+        self.assertGreaterEqual(len(results), 2)
+        self.assertTrue(all(result.passed for result in results), results)
 
     def test_prompt_builder_contains_core_persona_fields(self) -> None:
         persona = default_berry_persona()

@@ -56,6 +56,15 @@ func (c *AIClient) Plan(ctx context.Context, request AIAgentPlanRequest) (AIAgen
 	return result, nil
 }
 
+func (c *AIClient) Step(ctx context.Context, request AIAgentStepRequest) (AIAgentStepResponse, error) {
+	var result AIAgentStepResponse
+	if err := c.postJSON(ctx, "/agent/step", request, &result); err != nil {
+		return AIAgentStepResponse{}, err
+	}
+
+	return result, nil
+}
+
 func (c *AIClient) postJSON(ctx context.Context, path string, requestPayload any, result any) error {
 	payload, err := json.Marshal(requestPayload)
 	if err != nil {

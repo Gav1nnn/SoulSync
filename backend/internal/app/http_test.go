@@ -156,6 +156,101 @@ func TestMemoriesEndpointReturnsSavedMemories(t *testing.T) {
 	}
 }
 
+func TestMemoryStatusEndpointDisablesMemoryContext(t *testing.T) {
+	callCount := 0
+	var memoryID string
+	aiClient := NewAIClientWithHTTPClient("http://ai-engine.local", &http.Client{
+		Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
+			callCount++
+			var request AIGenerateRequest
+			if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+				t.Fatalf("decode ai request: %v", err)
+			}
+			if callCount == 2 && len(request.Memories) != 0 {
+				t.Fatalf("expected disabled memory to be excluded from AI request: %#v", request.Memories)
+			}
+			if callCount == 3 && len(request.Memories) != 1 {
+				t.Fatalf("expected reenabled memory to be injected: %#v", request.Memories)
+			}
+
+			candidatesJSON := `[]`
+			if callCount == 1 {
+				candidatesJSON = `[{"type":"project_fact","content":"项目使用 Vue 3。","reason":"用户明确说明技术栈。","confidence":0.9}]`
+			}
+			return &http.Response{
+				StatusCode: http.StatusOK,
+				Header:     http.Header{"Content-Type": []string{"application/json"}},
+				Body: io.NopCloser(bytes.NewBufferString(
+					`{"reply":"Berry reply","persona":"Berry","context_used":["persona"],"used_persona":true,"used_memory_ids":[],"used_knowledge_chunk_ids":[],"memory_written":false,"memory_candidates":` + candidatesJSON + `}`,
+				)),
+			}, nil
+		}),
+	})
+	server := NewHTTPServer(newTestService(t, aiClient)).Router()
+
+	chatBody := bytes.NewBufferString(`{"message":"我们项目使用 Vue 3"}`)
+	chatRequest := httptest.NewRequest(http.MethodPost, "/api/chat", chatBody)
+	chatRequest.Header.Set("Content-Type", "application/json")
+	chatRecorder := httptest.NewRecorder()
+	server.ServeHTTP(chatRecorder, chatRequest)
+	if chatRecorder.Code != http.StatusOK {
+		t.Fatalf("expected chat status 200, got %d", chatRecorder.Code)
+	}
+
+	listRequest := httptest.NewRequest(http.MethodGet, "/api/memories", nil)
+	listRecorder := httptest.NewRecorder()
+	server.ServeHTTP(listRecorder, listRequest)
+	var listResponse struct {
+		Memories []Memory `json:"memories"`
+	}
+	if err := json.Unmarshal(listRecorder.Body.Bytes(), &listResponse); err != nil {
+		t.Fatalf("decode memories response: %v", err)
+	}
+	if len(listResponse.Memories) != 1 {
+		t.Fatalf("expected one memory: %#v", listResponse.Memories)
+	}
+	memoryID = listResponse.Memories[0].ID
+
+	disableBody := bytes.NewBufferString(`{"status":"disabled"}`)
+	disableRequest := httptest.NewRequest(http.MethodPatch, "/api/memories/"+memoryID, disableBody)
+	disableRequest.Header.Set("Content-Type", "application/json")
+	disableRecorder := httptest.NewRecorder()
+	server.ServeHTTP(disableRecorder, disableRequest)
+	if disableRecorder.Code != http.StatusOK {
+		t.Fatalf("expected disable status 200, got %d: %s", disableRecorder.Code, disableRecorder.Body.String())
+	}
+	if !bytes.Contains(disableRecorder.Body.Bytes(), []byte(`"status":"disabled"`)) {
+		t.Fatalf("expected disabled memory response: %s", disableRecorder.Body.String())
+	}
+
+	secondChatBody := bytes.NewBufferString(`{"message":"Vue 相关约定是什么"}`)
+	secondChatRequest := httptest.NewRequest(http.MethodPost, "/api/chat", secondChatBody)
+	secondChatRequest.Header.Set("Content-Type", "application/json")
+	secondChatRecorder := httptest.NewRecorder()
+	server.ServeHTTP(secondChatRecorder, secondChatRequest)
+	if secondChatRecorder.Code != http.StatusOK {
+		t.Fatalf("expected second chat status 200, got %d", secondChatRecorder.Code)
+	}
+
+	enableBody := bytes.NewBufferString(`{"status":"active"}`)
+	enableRequest := httptest.NewRequest(http.MethodPatch, "/api/memories/"+memoryID, enableBody)
+	enableRequest.Header.Set("Content-Type", "application/json")
+	enableRecorder := httptest.NewRecorder()
+	server.ServeHTTP(enableRecorder, enableRequest)
+	if enableRecorder.Code != http.StatusOK {
+		t.Fatalf("expected enable status 200, got %d: %s", enableRecorder.Code, enableRecorder.Body.String())
+	}
+
+	thirdChatBody := bytes.NewBufferString(`{"message":"Vue 相关约定是什么"}`)
+	thirdChatRequest := httptest.NewRequest(http.MethodPost, "/api/chat", thirdChatBody)
+	thirdChatRequest.Header.Set("Content-Type", "application/json")
+	thirdChatRecorder := httptest.NewRecorder()
+	server.ServeHTTP(thirdChatRecorder, thirdChatRequest)
+	if thirdChatRecorder.Code != http.StatusOK {
+		t.Fatalf("expected third chat status 200, got %d", thirdChatRecorder.Code)
+	}
+}
+
 func TestTraceEndpointReturnsCompleteTrace(t *testing.T) {
 	aiClient := NewAIClientWithHTTPClient("http://ai-engine.local", &http.Client{
 		Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
@@ -394,6 +489,22 @@ func TestCurrentWorkspaceSummaryScansProjectCandidates(t *testing.T) {
 	if !containsCandidate(response.Summary.BackendRouteCandidates, "backend/main.go") {
 		t.Fatalf("expected backend route candidate: %#v", response.Summary.BackendRouteCandidates)
 	}
+	if !containsCandidate(response.Summary.ProjectDocCandidates, "README.md") || !containsCandidate(response.Summary.ProjectDocCandidates, "docs/api.md") {
+		t.Fatalf("expected project doc candidates: %#v", response.Summary.ProjectDocCandidates)
+	}
+	if len(response.Summary.ProjectDocSnippets) == 0 || !strings.Contains(response.Summary.ProjectDocSnippets[0].Content, "Fixture") {
+		t.Fatalf("expected project doc snippets: %#v", response.Summary.ProjectDocSnippets)
+	}
+	userAPI, ok := findAPICandidate(response.Summary.APICandidates, "GET", "/api/users")
+	if !ok {
+		t.Fatalf("expected users API candidate: %#v", response.Summary.APICandidates)
+	}
+	if userAPI.Handler != "listUsers" || userAPI.HandlerFile != "backend/main.go" {
+		t.Fatalf("expected handler metadata on API candidate: %#v", userAPI)
+	}
+	if !containsCandidate(userAPI.TypeDefinitions, "backend/main.go") {
+		t.Fatalf("expected type definition metadata on API candidate: %#v", userAPI.TypeDefinitions)
+	}
 	if !containsCandidate(response.Summary.TypeFileCandidates, "frontend/src/types/user.ts") {
 		t.Fatalf("expected type file candidate: %#v", response.Summary.TypeFileCandidates)
 	}
@@ -444,9 +555,31 @@ func TestCreateAgentTaskRequiresConnectedWorkspace(t *testing.T) {
 }
 
 func TestCreateAgentTaskRunsPlannerLifecycle(t *testing.T) {
+	stepCalls := 0
 	aiClient := NewAIClientWithHTTPClient("http://ai-engine.local", &http.Client{
 		Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
-			if r.Method != http.MethodPost || r.URL.Path != "/agent/plan" {
+			if r.Method != http.MethodPost {
+				t.Fatalf("unexpected request: %s %s", r.Method, r.URL.Path)
+			}
+
+			if r.URL.Path == "/agent/step" {
+				stepCalls++
+				var request AIAgentStepRequest
+				if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+					t.Fatalf("decode step request: %v", err)
+				}
+				if request.PreviousObservation == nil || request.PreviousObservation.Path != "backend/main.go" {
+					t.Fatalf("expected previous observation to be sent: %#v", request)
+				}
+				return &http.Response{
+					StatusCode: http.StatusOK,
+					Header:     http.Header{"Content-Type": []string{"application/json"}},
+					Body: io.NopCloser(bytes.NewBufferString(
+						`{"summary":"已读取接口入口，当前阶段只读完成。","action":{"type":"finish","reason":"等待接口识别阶段继续。"},"context_used":["persona","workspace.summary","agent.observation","mock_stepper"],"stepper":"mock_stepper"}`,
+					)),
+				}, nil
+			}
+			if r.URL.Path != "/agent/plan" {
 				t.Fatalf("unexpected request: %s %s", r.Method, r.URL.Path)
 			}
 
@@ -521,21 +654,357 @@ func TestCreateAgentTaskRunsPlannerLifecycle(t *testing.T) {
 	if len(task.Logs) < 4 {
 		t.Fatalf("expected lifecycle logs: %#v", task.Logs)
 	}
-	if task.Verification == nil || task.Verification.Status != "passed" {
+	if len(task.Steps) != 2 {
+		t.Fatalf("expected read and finish steps: %#v", task.Steps)
+	}
+	if task.Steps[0].Action.Type != "read_file" || task.Steps[0].Observation.Path != "backend/main.go" {
+		t.Fatalf("expected first step to read backend/main.go: %#v", task.Steps[0])
+	}
+	if task.Steps[1].Action.Type != "finish" {
+		t.Fatalf("expected second step to finish: %#v", task.Steps[1])
+	}
+	if stepCalls != 1 {
+		t.Fatalf("expected one stepper call, got %d", stepCalls)
+	}
+	if task.Verification == nil || task.Verification.Status != "skipped" {
 		t.Fatalf("expected skipped verification: %#v", task.Verification)
 	}
-	if len(task.ChangedFiles) != 1 {
-		t.Fatalf("expected one changed file in safe execution stage: %#v", task.ChangedFiles)
+	if task.Result == nil || !strings.Contains(task.Result.Summary, "no file changes") {
+		t.Fatalf("expected read-only result summary: %#v", task.Result)
 	}
-	if task.ChangedFiles[0] != ".soulsync/"+task.ID+".md" {
-		t.Fatalf("unexpected changed file: %#v", task.ChangedFiles)
+	if len(task.ChangedFiles) != 0 {
+		t.Fatalf("expected no changed files in read-only stepper stage: %#v", task.ChangedFiles)
 	}
-	if _, err := os.Stat(filepath.Join(workspacePath, filepath.FromSlash(task.ChangedFiles[0]))); err != nil {
-		t.Fatalf("expected changed file to exist: %v", err)
+	traceRequest := httptest.NewRequest(http.MethodGet, "/api/agent/tasks/"+task.ID+"/trace", nil)
+	traceRecorder := httptest.NewRecorder()
+	server.ServeHTTP(traceRecorder, traceRequest)
+	if traceRecorder.Code != http.StatusOK {
+		t.Fatalf("expected trace status 200, got %d: %s", traceRecorder.Code, traceRecorder.Body.String())
+	}
+	var traceResponse struct {
+		Trace AgentTaskTrace `json:"trace"`
+	}
+	if err := json.Unmarshal(traceRecorder.Body.Bytes(), &traceResponse); err != nil {
+		t.Fatalf("decode task trace response: %v", err)
+	}
+	if traceResponse.Trace.TaskID != task.ID || traceResponse.Trace.Goal != task.Goal {
+		t.Fatalf("expected trace to describe task: %#v", traceResponse.Trace)
+	}
+	if len(traceResponse.Trace.Events) < 3 {
+		t.Fatalf("expected planner, action, and verification events: %#v", traceResponse.Trace.Events)
+	}
+	if traceResponse.Trace.Events[0].Kind != "planning" || traceResponse.Trace.Events[1].Kind != "action" {
+		t.Fatalf("unexpected trace event order: %#v", traceResponse.Trace.Events)
+	}
+	if traceResponse.Trace.Events[1].Action == nil || traceResponse.Trace.Events[1].Observation == nil {
+		t.Fatalf("expected action event details: %#v", traceResponse.Trace.Events[1])
+	}
+	if traceResponse.Trace.Verification == nil || traceResponse.Trace.Verification.Status != "skipped" {
+		t.Fatalf("expected trace verification: %#v", traceResponse.Trace.Verification)
 	}
 	currentBranch := strings.TrimSpace(runTestGitOutput(t, workspacePath, "branch", "--show-current"))
 	if currentBranch != task.BranchName {
 		t.Fatalf("expected task branch %q, got %q", task.BranchName, currentBranch)
+	}
+}
+
+func TestListAgentTasksReturnsRecentTasks(t *testing.T) {
+	aiClient := NewAIClientWithHTTPClient("http://ai-engine.local", &http.Client{
+		Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
+			switch r.URL.Path {
+			case "/agent/plan":
+				return &http.Response{
+					StatusCode: http.StatusOK,
+					Header:     http.Header{"Content-Type": []string{"application/json"}},
+					Body: io.NopCloser(bytes.NewBufferString(
+						`{"plan":["读取用户接口"],"files_to_read":["backend/main.go"],"initial_action":{"type":"read_file","path":"backend/main.go","reason":"先确认接口定义"},"context_used":["persona","workspace.summary","mock_planner"],"used_memory_ids":[],"used_knowledge_chunk_ids":[],"planner":"mock_planner"}`,
+					)),
+				}, nil
+			case "/agent/step":
+				return &http.Response{
+					StatusCode: http.StatusOK,
+					Header:     http.Header{"Content-Type": []string{"application/json"}},
+					Body: io.NopCloser(bytes.NewBufferString(
+						`{"summary":"完成","action":{"type":"finish","reason":"read-only completed"},"context_used":["persona","workspace.summary","agent.observation","mock_stepper"],"stepper":"mock_stepper"}`,
+					)),
+				}, nil
+			default:
+				t.Fatalf("unexpected request: %s %s", r.Method, r.URL.Path)
+			}
+			return nil, nil
+		}),
+	})
+	server := NewHTTPServer(newTestService(t, aiClient)).Router()
+	workspacePath := newFrontendBackendFixture(t)
+
+	connectBody := bytes.NewBufferString(`{"path":"` + workspacePath + `"}`)
+	connectRequest := httptest.NewRequest(http.MethodPost, "/api/workspaces", connectBody)
+	connectRequest.Header.Set("Content-Type", "application/json")
+	connectRecorder := httptest.NewRecorder()
+	server.ServeHTTP(connectRecorder, connectRequest)
+	if connectRecorder.Code != http.StatusOK {
+		t.Fatalf("expected connect status 200, got %d: %s", connectRecorder.Code, connectRecorder.Body.String())
+	}
+
+	body := bytes.NewBufferString(`{"goal":"根据用户列表接口生成 Vue 页面"}`)
+	request := httptest.NewRequest(http.MethodPost, "/api/agent/tasks", body)
+	request.Header.Set("Content-Type", "application/json")
+	recorder := httptest.NewRecorder()
+	server.ServeHTTP(recorder, request)
+	if recorder.Code != http.StatusAccepted {
+		t.Fatalf("expected status 202, got %d: %s", recorder.Code, recorder.Body.String())
+	}
+
+	var createdResponse struct {
+		Task AgentTask `json:"task"`
+	}
+	if err := json.Unmarshal(recorder.Body.Bytes(), &createdResponse); err != nil {
+		t.Fatalf("decode created task response: %v", err)
+	}
+	task := waitForAgentTaskStatus(t, server, createdResponse.Task.ID, AgentTaskCompleted)
+
+	listRequest := httptest.NewRequest(http.MethodGet, "/api/agent/tasks?limit=1", nil)
+	listRecorder := httptest.NewRecorder()
+	server.ServeHTTP(listRecorder, listRequest)
+	if listRecorder.Code != http.StatusOK {
+		t.Fatalf("expected list status 200, got %d: %s", listRecorder.Code, listRecorder.Body.String())
+	}
+
+	var listResponse struct {
+		Tasks []AgentTask `json:"tasks"`
+	}
+	if err := json.Unmarshal(listRecorder.Body.Bytes(), &listResponse); err != nil {
+		t.Fatalf("decode task list response: %v", err)
+	}
+	if len(listResponse.Tasks) != 1 || listResponse.Tasks[0].ID != task.ID {
+		t.Fatalf("expected recent task %s, got %#v", task.ID, listResponse.Tasks)
+	}
+
+	badLimitRequest := httptest.NewRequest(http.MethodGet, "/api/agent/tasks?limit=bad", nil)
+	badLimitRecorder := httptest.NewRecorder()
+	server.ServeHTTP(badLimitRecorder, badLimitRequest)
+	if badLimitRecorder.Code != http.StatusBadRequest {
+		t.Fatalf("expected bad limit status 400, got %d", badLimitRecorder.Code)
+	}
+}
+
+func TestCreateAgentTaskWritesGeneratedFrontendFiles(t *testing.T) {
+	stepCalls := 0
+	aiClient := NewAIClientWithHTTPClient("http://ai-engine.local", &http.Client{
+		Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
+			if r.Method != http.MethodPost {
+				t.Fatalf("unexpected request: %s %s", r.Method, r.URL.Path)
+			}
+
+			switch r.URL.Path {
+			case "/agent/plan":
+				return &http.Response{
+					StatusCode: http.StatusOK,
+					Header:     http.Header{"Content-Type": []string{"application/json"}},
+					Body: io.NopCloser(bytes.NewBufferString(
+						`{"plan":["读取用户接口","生成前端类型","生成 API client","生成 Vue 页面"],"files_to_read":["backend/main.go"],"initial_action":{"type":"read_file","path":"backend/main.go","reason":"先确认接口定义"},"context_used":["persona","workspace.summary","mock_planner"],"used_memory_ids":[],"used_knowledge_chunk_ids":[],"planner":"mock_planner"}`,
+					)),
+				}, nil
+			case "/agent/step":
+				stepCalls++
+				var request AIAgentStepRequest
+				if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+					t.Fatalf("decode step request: %v", err)
+				}
+				if len(request.WorkspaceSummary.APICandidates) == 0 {
+					t.Fatalf("expected API candidates in step request: %#v", request.WorkspaceSummary)
+				}
+				responses := []string{
+					`{"summary":"写类型","action":{"type":"write_file","path":"frontend/src/types/soulsyncUser.ts","content":"export type SoulSyncUser = {\n  id: string | number;\n  name?: string;\n};\n","reason":"写类型"},"context_used":["persona","workspace.summary","agent.observation","mock_stepper"],"stepper":"mock_stepper"}`,
+					`{"summary":"写 API client","action":{"type":"write_file","path":"frontend/src/api/soulsyncUser.ts","content":"import type { SoulSyncUser } from '../types/soulsyncUser';\n\nexport async function fetchSoulSyncUserList(): Promise<SoulSyncUser[]> {\n  return [];\n}\n","reason":"写 API client"},"context_used":["persona","workspace.summary","agent.observation","mock_stepper"],"stepper":"mock_stepper"}`,
+					`{"summary":"写 Vue 页面","action":{"type":"write_file","path":"frontend/src/views/SoulSyncUserView.vue","content":"<template><main>User list</main></template>\n","reason":"写 Vue 页面"},"context_used":["persona","workspace.summary","agent.observation","mock_stepper"],"stepper":"mock_stepper"}`,
+					`{"summary":"完成","action":{"type":"finish","reason":"接口到页面生成完成"},"context_used":["persona","workspace.summary","agent.observation","mock_stepper"],"stepper":"mock_stepper"}`,
+				}
+				if stepCalls > len(responses) {
+					t.Fatalf("unexpected step call %d", stepCalls)
+				}
+				return &http.Response{
+					StatusCode: http.StatusOK,
+					Header:     http.Header{"Content-Type": []string{"application/json"}},
+					Body:       io.NopCloser(bytes.NewBufferString(responses[stepCalls-1])),
+				}, nil
+			default:
+				t.Fatalf("unexpected request: %s %s", r.Method, r.URL.Path)
+			}
+			return nil, nil
+		}),
+	})
+	server := NewHTTPServer(newTestService(t, aiClient)).Router()
+	workspacePath := newFrontendBackendFixture(t)
+
+	connectBody := bytes.NewBufferString(`{"path":"` + workspacePath + `"}`)
+	connectRequest := httptest.NewRequest(http.MethodPost, "/api/workspaces", connectBody)
+	connectRequest.Header.Set("Content-Type", "application/json")
+	connectRecorder := httptest.NewRecorder()
+	server.ServeHTTP(connectRecorder, connectRequest)
+	if connectRecorder.Code != http.StatusOK {
+		t.Fatalf("expected connect status 200, got %d: %s", connectRecorder.Code, connectRecorder.Body.String())
+	}
+
+	body := bytes.NewBufferString(`{"goal":"根据用户列表接口生成 Vue 页面"}`)
+	request := httptest.NewRequest(http.MethodPost, "/api/agent/tasks", body)
+	request.Header.Set("Content-Type", "application/json")
+	recorder := httptest.NewRecorder()
+	server.ServeHTTP(recorder, request)
+	if recorder.Code != http.StatusAccepted {
+		t.Fatalf("expected status 202, got %d: %s", recorder.Code, recorder.Body.String())
+	}
+
+	var response struct {
+		Task AgentTask `json:"task"`
+	}
+	if err := json.Unmarshal(recorder.Body.Bytes(), &response); err != nil {
+		t.Fatalf("decode task response: %v", err)
+	}
+
+	task := waitForAgentTaskStatus(t, server, response.Task.ID, AgentTaskCompleted)
+	expectedFiles := []string{
+		"frontend/src/types/soulsyncUser.ts",
+		"frontend/src/api/soulsyncUser.ts",
+		"frontend/src/views/SoulSyncUserView.vue",
+	}
+	for _, expectedFile := range expectedFiles {
+		if !containsString(task.ChangedFiles, expectedFile) {
+			t.Fatalf("expected changed file %s: %#v", expectedFile, task.ChangedFiles)
+		}
+		if _, err := os.Stat(filepath.Join(workspacePath, filepath.FromSlash(expectedFile))); err != nil {
+			t.Fatalf("expected generated file %s to exist: %v", expectedFile, err)
+		}
+	}
+	if task.Verification == nil || task.Verification.Status != "passed" {
+		t.Fatalf("expected verification to pass: %#v", task.Verification)
+	}
+	if task.Result == nil || !strings.Contains(task.Result.Summary, "3 changed files") {
+		t.Fatalf("expected generated task result summary: %#v", task.Result)
+	}
+	if len(task.Result.NextSuggestions) == 0 {
+		t.Fatalf("expected next suggestions: %#v", task.Result)
+	}
+	if stepCalls != 4 {
+		t.Fatalf("expected four stepper calls, got %d", stepCalls)
+	}
+}
+
+func TestRetryAgentTaskReusesFailedTaskBranch(t *testing.T) {
+	planCalls := 0
+	stepCalls := 0
+	aiClient := NewAIClientWithHTTPClient("http://ai-engine.local", &http.Client{
+		Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
+			switch r.URL.Path {
+			case "/agent/plan":
+				planCalls++
+				return &http.Response{
+					StatusCode: http.StatusOK,
+					Header:     http.Header{"Content-Type": []string{"application/json"}},
+					Body: io.NopCloser(bytes.NewBufferString(
+						`{"plan":["读取用户接口"],"files_to_read":["backend/main.go"],"initial_action":{"type":"read_file","path":"backend/main.go","reason":"先确认接口定义"},"context_used":["persona","workspace.summary","mock_planner"],"used_memory_ids":[],"used_knowledge_chunk_ids":[],"planner":"mock_planner"}`,
+					)),
+				}, nil
+			case "/agent/step":
+				stepCalls++
+				body := `{"summary":"完成","action":{"type":"finish","reason":"retry completed"},"context_used":["persona","workspace.summary","agent.observation","mock_stepper"],"stepper":"mock_stepper"}`
+				if stepCalls == 1 {
+					body = `{"summary":"返回非法动作","action":{"type":"delete_file","path":"frontend/src/views/UserListView.vue","reason":"unsupported"},"context_used":["persona","workspace.summary","agent.observation","mock_stepper"],"stepper":"mock_stepper"}`
+				}
+				return &http.Response{
+					StatusCode: http.StatusOK,
+					Header:     http.Header{"Content-Type": []string{"application/json"}},
+					Body:       io.NopCloser(bytes.NewBufferString(body)),
+				}, nil
+			default:
+				t.Fatalf("unexpected request: %s %s", r.Method, r.URL.Path)
+			}
+			return nil, nil
+		}),
+	})
+	server := NewHTTPServer(newTestService(t, aiClient)).Router()
+	workspacePath := newFrontendBackendFixture(t)
+
+	connectBody := bytes.NewBufferString(`{"path":"` + workspacePath + `"}`)
+	connectRequest := httptest.NewRequest(http.MethodPost, "/api/workspaces", connectBody)
+	connectRequest.Header.Set("Content-Type", "application/json")
+	connectRecorder := httptest.NewRecorder()
+	server.ServeHTTP(connectRecorder, connectRequest)
+	if connectRecorder.Code != http.StatusOK {
+		t.Fatalf("expected connect status 200, got %d: %s", connectRecorder.Code, connectRecorder.Body.String())
+	}
+
+	body := bytes.NewBufferString(`{"goal":"根据用户列表接口生成 Vue 页面"}`)
+	request := httptest.NewRequest(http.MethodPost, "/api/agent/tasks", body)
+	request.Header.Set("Content-Type", "application/json")
+	recorder := httptest.NewRecorder()
+	server.ServeHTTP(recorder, request)
+	if recorder.Code != http.StatusAccepted {
+		t.Fatalf("expected status 202, got %d: %s", recorder.Code, recorder.Body.String())
+	}
+	var response struct {
+		Task AgentTask `json:"task"`
+	}
+	if err := json.Unmarshal(recorder.Body.Bytes(), &response); err != nil {
+		t.Fatalf("decode task response: %v", err)
+	}
+
+	failedTask := waitForAgentTaskStatus(t, server, response.Task.ID, AgentTaskFailed)
+	if failedTask.BranchName == "" {
+		t.Fatalf("expected failed task branch: %#v", failedTask)
+	}
+	if len(failedTask.Steps) != 2 {
+		t.Fatalf("expected failed run steps to be preserved: %#v", failedTask.Steps)
+	}
+
+	retryRequest := httptest.NewRequest(http.MethodPost, "/api/agent/tasks/"+failedTask.ID+"/retry", nil)
+	retryRecorder := httptest.NewRecorder()
+	server.ServeHTTP(retryRecorder, retryRequest)
+	if retryRecorder.Code != http.StatusAccepted {
+		t.Fatalf("expected retry status 202, got %d: %s", retryRecorder.Code, retryRecorder.Body.String())
+	}
+
+	retriedTask := waitForAgentTaskStatus(t, server, failedTask.ID, AgentTaskCompleted)
+	if retriedTask.BranchName != failedTask.BranchName {
+		t.Fatalf("expected retry to reuse branch %q, got %q", failedTask.BranchName, retriedTask.BranchName)
+	}
+	if retriedTask.RetryCount != 1 {
+		t.Fatalf("expected retry count 1: %#v", retriedTask)
+	}
+	if len(retriedTask.Steps) <= len(failedTask.Steps) {
+		t.Fatalf("expected retry to append steps, before=%d after=%d", len(failedTask.Steps), len(retriedTask.Steps))
+	}
+	if planCalls != 2 {
+		t.Fatalf("expected planner to run for original and retry, got %d", planCalls)
+	}
+	currentBranch := strings.TrimSpace(runTestGitOutput(t, workspacePath, "branch", "--show-current"))
+	if currentBranch != failedTask.BranchName {
+		t.Fatalf("expected workspace to remain on task branch %q, got %q", failedTask.BranchName, currentBranch)
+	}
+}
+
+func TestBuildAgentTaskResultExtractsFailureFile(t *testing.T) {
+	task := AgentTask{
+		Status: AgentTaskFailed,
+		Verification: &AgentVerification{
+			Status:  "failed",
+			Command: "cd frontend && npm run build",
+			Output: []string{
+				"frontend/src/views/SoulSyncUserView.vue:12:3 - error TS2304",
+			},
+		},
+	}
+
+	result := buildAgentTaskResult(task, "verification failed")
+
+	if result.Summary != "verification failed" {
+		t.Fatalf("unexpected result summary: %#v", result)
+	}
+	if result.FailureFile != "frontend/src/views/SoulSyncUserView.vue" {
+		t.Fatalf("expected failure file to be extracted: %#v", result)
+	}
+	if len(result.NextSuggestions) == 0 {
+		t.Fatalf("expected suggestions: %#v", result)
 	}
 }
 
@@ -678,6 +1147,8 @@ func newFrontendBackendFixture(t *testing.T) string {
 	t.Helper()
 
 	dir := newGitFixture(t)
+	writeFixtureFile(t, dir, "README.md", "# Fixture\n\nUse existing Vue views and API clients.\n")
+	writeFixtureFile(t, dir, "docs/api.md", "# API\n\nGET /api/users returns users.\n")
 	writeFixtureFile(t, dir, "frontend/package.json", `{"scripts":{"build":"node -e \"console.log('fixture build ok')\"","test":"node -e \"console.log('fixture test ok')\""},"dependencies":{"vue":"^3.5.0"},"devDependencies":{"vite":"^6.0.0"}}`)
 	writeFixtureFile(t, dir, "frontend/package-lock.json", `{"name":"fixture"}`)
 	writeFixtureFile(t, dir, "frontend/src/views/UserListView.vue", `<template><main>User list</main></template>`)
@@ -687,9 +1158,19 @@ func newFrontendBackendFixture(t *testing.T) string {
 
 import "github.com/gin-gonic/gin"
 
+type UserResponse struct {
+	ID string
+	Name string
+}
+
 func main() {
 	router := gin.Default()
-	router.GET("/api/users", func(c *gin.Context) {})
+	api := router.Group("/api")
+	api.GET("/users", listUsers)
+}
+
+func listUsers(c *gin.Context) {
+	c.JSON(200, []UserResponse{})
 }`)
 
 	runTestGit(t, dir, "add", ".")
@@ -726,6 +1207,15 @@ func containsCandidate(candidates []WorkspaceCandidate, expectedPath string) boo
 		}
 	}
 	return false
+}
+
+func findAPICandidate(candidates []APICandidate, method string, path string) (APICandidate, bool) {
+	for _, candidate := range candidates {
+		if candidate.Method == method && candidate.Path == path {
+			return candidate, true
+		}
+	}
+	return APICandidate{}, false
 }
 
 func runTestGit(t *testing.T, dir string, args ...string) {

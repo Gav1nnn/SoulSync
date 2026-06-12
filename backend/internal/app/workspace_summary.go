@@ -3,6 +3,9 @@ package app
 import (
 	"encoding/json"
 	"fmt"
+	"go/ast"
+	"go/parser"
+	"go/token"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -15,6 +18,8 @@ const (
 	maxWorkspaceScanFiles = 700
 	maxTreeItems          = 80
 	maxCandidateItems     = 12
+	maxProjectDocSnippets = 4
+	maxProjectDocChars    = 1600
 )
 
 var skippedWorkspaceDirs = map[string]bool{
@@ -46,6 +51,7 @@ func buildWorkspaceSummary(root string) (WorkspaceSummary, error) {
 		return WorkspaceSummary{}, err
 	}
 
+	projectDocCandidates := detectProjectDocCandidates(files)
 	return WorkspaceSummary{
 		WorkspacePath:           root,
 		RootName:                filepath.Base(root),
@@ -54,6 +60,9 @@ func buildWorkspaceSummary(root string) (WorkspaceSummary, error) {
 		FrontendFrameworks:      detectFrontendFrameworks(root, files),
 		BackendFrameworks:       detectBackendFrameworks(files),
 		BackendRouteCandidates:  detectBackendRouteCandidates(files),
+		APICandidates:           detectAPICandidates(files),
+		ProjectDocCandidates:    projectDocCandidates,
+		ProjectDocSnippets:      detectProjectDocSnippets(files, projectDocCandidates),
 		TypeFileCandidates:      detectTypeFileCandidates(files),
 		FrontendEntryCandidates: detectFrontendEntryCandidates(files),
 		APIClientCandidates:     detectAPIClientCandidates(files),
@@ -239,6 +248,283 @@ func detectBackendRouteCandidates(files []scannedWorkspaceFile) []WorkspaceCandi
 	}
 
 	return candidates
+}
+
+func detectAPICandidates(files []scannedWorkspaceFile) []APICandidate {
+	candidates := make([]APICandidate, 0, maxCandidateItems)
+	for _, file := range files {
+		if len(candidates) >= maxCandidateItems {
+			break
+		}
+		if file.info.IsDir() || !strings.HasSuffix(file.relPath, ".go") {
+			continue
+		}
+		content := readSmallText(file.absPath)
+		if !looksLikeGinRouteFile(content) {
+			continue
+		}
+		fileCandidates := detectGinAPICandidates(file, content)
+		for _, candidate := range fileCandidates {
+			candidates = append(candidates, candidate)
+			if len(candidates) >= maxCandidateItems {
+				break
+			}
+		}
+	}
+
+	return candidates
+}
+
+func detectProjectDocCandidates(files []scannedWorkspaceFile) []WorkspaceCandidate {
+	candidates := make([]WorkspaceCandidate, 0, maxCandidateItems)
+	for _, file := range files {
+		if len(candidates) >= maxCandidateItems {
+			break
+		}
+		if file.info.IsDir() {
+			continue
+		}
+
+		lowerPath := strings.ToLower(file.relPath)
+		base := strings.ToLower(filepath.Base(file.relPath))
+		switch {
+		case strings.HasPrefix(base, "readme"):
+			candidates = append(candidates, WorkspaceCandidate{Path: file.relPath, Kind: "project.readme", Reason: "README candidate for project conventions"})
+		case strings.HasPrefix(lowerPath, "docs/") || strings.Contains(lowerPath, "/docs/"):
+			if isProjectDocFile(lowerPath) {
+				candidates = append(candidates, WorkspaceCandidate{Path: file.relPath, Kind: "project.docs", Reason: "project documentation candidate"})
+			}
+		case strings.Contains(lowerPath, "openapi") || strings.Contains(lowerPath, "swagger"):
+			if isProjectDocFile(lowerPath) {
+				candidates = append(candidates, WorkspaceCandidate{Path: file.relPath, Kind: "project.api_docs", Reason: "API documentation candidate"})
+			}
+		case strings.Contains(lowerPath, "api") && strings.Contains(lowerPath, "doc"):
+			if isProjectDocFile(lowerPath) {
+				candidates = append(candidates, WorkspaceCandidate{Path: file.relPath, Kind: "project.api_docs", Reason: "API documentation candidate"})
+			}
+		}
+	}
+
+	return candidates
+}
+
+func detectProjectDocSnippets(files []scannedWorkspaceFile, candidates []WorkspaceCandidate) []ProjectDocSnippet {
+	if len(candidates) == 0 {
+		return []ProjectDocSnippet{}
+	}
+
+	fileByPath := map[string]scannedWorkspaceFile{}
+	for _, file := range files {
+		fileByPath[file.relPath] = file
+	}
+
+	snippets := make([]ProjectDocSnippet, 0, min(maxProjectDocSnippets, len(candidates)))
+	for _, candidate := range candidates {
+		if len(snippets) >= maxProjectDocSnippets {
+			break
+		}
+		file, ok := fileByPath[candidate.Path]
+		if !ok {
+			continue
+		}
+		content := normalizeProjectDocSnippet(readSmallText(file.absPath))
+		if content == "" {
+			continue
+		}
+		snippets = append(snippets, ProjectDocSnippet{
+			Path:    candidate.Path,
+			Kind:    candidate.Kind,
+			Content: content,
+		})
+	}
+
+	return snippets
+}
+
+func normalizeProjectDocSnippet(content string) string {
+	content = strings.TrimSpace(content)
+	if content == "" {
+		return ""
+	}
+	content = strings.Join(strings.Fields(content), " ")
+	runes := []rune(content)
+	if len(runes) > maxProjectDocChars {
+		return string(runes[:maxProjectDocChars]) + " ... truncated"
+	}
+	return content
+}
+
+func detectGinAPICandidates(file scannedWorkspaceFile, content string) []APICandidate {
+	fileSet := token.NewFileSet()
+	parsedFile, err := parser.ParseFile(fileSet, file.absPath, content, 0)
+	if err != nil {
+		return []APICandidate{}
+	}
+
+	groupPrefixes := map[string]string{}
+	structCandidates := ginStructCandidates(file.relPath, parsedFile)
+	candidates := []APICandidate{}
+	ast.Inspect(parsedFile, func(node ast.Node) bool {
+		assign, ok := node.(*ast.AssignStmt)
+		if ok {
+			recordGinGroupAssignment(groupPrefixes, assign)
+			return true
+		}
+
+		call, ok := node.(*ast.CallExpr)
+		if !ok {
+			return true
+		}
+		selector, ok := call.Fun.(*ast.SelectorExpr)
+		if !ok {
+			return true
+		}
+		method := selector.Sel.Name
+		if !isGinHTTPMethod(method) {
+			return true
+		}
+		if len(call.Args) < 2 {
+			return true
+		}
+		routePath, ok := stringLiteralValue(call.Args[0])
+		if !ok {
+			return true
+		}
+		receiver := exprIdentName(selector.X)
+		fullPath := joinAPIPath(groupPrefixes[receiver], routePath)
+		candidates = append(candidates, APICandidate{
+			Method:          method,
+			Path:            fullPath,
+			Handler:         handlerName(call.Args[1]),
+			HandlerFile:     file.relPath,
+			TypeDefinitions: structCandidates,
+			Reason:          "detected Gin route registration",
+		})
+		return true
+	})
+
+	return candidates
+}
+
+func recordGinGroupAssignment(groupPrefixes map[string]string, assign *ast.AssignStmt) {
+	if len(assign.Lhs) != 1 || len(assign.Rhs) != 1 {
+		return
+	}
+	target, ok := assign.Lhs[0].(*ast.Ident)
+	if !ok {
+		return
+	}
+	call, ok := assign.Rhs[0].(*ast.CallExpr)
+	if !ok {
+		return
+	}
+	selector, ok := call.Fun.(*ast.SelectorExpr)
+	if !ok || selector.Sel.Name != "Group" || len(call.Args) == 0 {
+		return
+	}
+	groupPath, ok := stringLiteralValue(call.Args[0])
+	if !ok {
+		return
+	}
+	parent := exprIdentName(selector.X)
+	groupPrefixes[target.Name] = joinAPIPath(groupPrefixes[parent], groupPath)
+}
+
+func ginStructCandidates(path string, parsedFile *ast.File) []WorkspaceCandidate {
+	candidates := []WorkspaceCandidate{}
+	for _, declaration := range parsedFile.Decls {
+		generalDeclaration, ok := declaration.(*ast.GenDecl)
+		if !ok || generalDeclaration.Tok != token.TYPE {
+			continue
+		}
+		for _, spec := range generalDeclaration.Specs {
+			typeSpec, ok := spec.(*ast.TypeSpec)
+			if !ok {
+				continue
+			}
+			if _, ok := typeSpec.Type.(*ast.StructType); !ok {
+				continue
+			}
+			candidates = append(candidates, WorkspaceCandidate{
+				Path:   path,
+				Kind:   "go.struct",
+				Reason: "struct " + typeSpec.Name.Name + " is defined near detected Gin routes",
+			})
+			if len(candidates) >= 6 {
+				return candidates
+			}
+		}
+	}
+
+	return candidates
+}
+
+func isGinHTTPMethod(method string) bool {
+	switch method {
+	case "GET", "POST", "PUT", "PATCH", "DELETE":
+		return true
+	default:
+		return false
+	}
+}
+
+func stringLiteralValue(expression ast.Expr) (string, bool) {
+	literal, ok := expression.(*ast.BasicLit)
+	if !ok || literal.Kind != token.STRING {
+		return "", false
+	}
+	value := strings.Trim(literal.Value, "`\"")
+	if value == "" {
+		value = "/"
+	}
+	return value, true
+}
+
+func exprIdentName(expression ast.Expr) string {
+	switch value := expression.(type) {
+	case *ast.Ident:
+		return value.Name
+	case *ast.SelectorExpr:
+		return value.Sel.Name
+	default:
+		return ""
+	}
+}
+
+func handlerName(expression ast.Expr) string {
+	switch value := expression.(type) {
+	case *ast.Ident:
+		return value.Name
+	case *ast.SelectorExpr:
+		if receiver := exprIdentName(value.X); receiver != "" {
+			return receiver + "." + value.Sel.Name
+		}
+		return value.Sel.Name
+	case *ast.CallExpr:
+		return handlerName(value.Fun)
+	case *ast.FuncLit:
+		return "inline handler"
+	default:
+		return ""
+	}
+}
+
+func joinAPIPath(prefix string, path string) string {
+	trimmedPrefix := strings.TrimSuffix(strings.TrimSpace(prefix), "/")
+	trimmedPath := strings.TrimSpace(path)
+	if trimmedPath == "" || trimmedPath == "/" {
+		if trimmedPrefix == "" {
+			return "/"
+		}
+		return trimmedPrefix
+	}
+	if !strings.HasPrefix(trimmedPath, "/") {
+		trimmedPath = "/" + trimmedPath
+	}
+	if trimmedPrefix == "" {
+		return trimmedPath
+	}
+	return trimmedPrefix + trimmedPath
 }
 
 func detectTypeFileCandidates(files []scannedWorkspaceFile) []WorkspaceCandidate {
@@ -452,6 +738,15 @@ func workspacePathDepth(path string) int {
 func isTextCodeFile(path string) bool {
 	switch strings.ToLower(filepath.Ext(path)) {
 	case ".go", ".py", ".js", ".jsx", ".ts", ".tsx", ".vue":
+		return true
+	default:
+		return false
+	}
+}
+
+func isProjectDocFile(path string) bool {
+	switch strings.ToLower(filepath.Ext(path)) {
+	case ".md", ".mdx", ".txt", ".json", ".yaml", ".yml":
 		return true
 	default:
 		return false

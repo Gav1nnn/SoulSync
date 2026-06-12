@@ -6,6 +6,7 @@ import ChatHeader from "../components/chat/ChatHeader.vue";
 import MessageComposer from "../components/chat/MessageComposer.vue";
 import MessageList from "../components/chat/MessageList.vue";
 import StatusPanel from "../components/chat/StatusPanel.vue";
+import MemoryPanel from "../components/memory/MemoryPanel.vue";
 import WorkspaceConnector from "../components/workspace/WorkspaceConnector.vue";
 import type { ChatErrorCode, ChatMessage, ChatStatus, Trace } from "../types/chat";
 
@@ -131,9 +132,6 @@ onMounted(() => {
 
 <template>
   <main class="chat-page">
-    <div class="ambient ambient-one" aria-hidden="true"></div>
-    <div class="ambient ambient-two" aria-hidden="true"></div>
-
     <section class="chat-shell">
       <ChatHeader />
 
@@ -141,6 +139,7 @@ onMounted(() => {
         <section class="main-column">
           <WorkspaceConnector />
           <AgentTaskPanel />
+          <MemoryPanel />
 
           <section class="quick-prompts" aria-label="quick prompts">
             <button
@@ -179,20 +178,39 @@ onMounted(() => {
 </template>
 
 <style scoped>
+:global(:root) {
+  --ink: #17252d;
+  --ink-soft: #2b414b;
+  --muted: #657780;
+  --line: rgba(31, 55, 66, 0.14);
+  --line-strong: rgba(31, 55, 66, 0.22);
+  --paper: #f5f1e8;
+  --panel: rgba(255, 252, 244, 0.78);
+  --panel-strong: rgba(255, 252, 244, 0.94);
+  --accent: #c85f49;
+  --accent-ink: #8d3b31;
+  --cyan: #2f7182;
+  --ok: #377e5b;
+  --warn: #a75f31;
+  --danger: #ad332f;
+  --radius: 8px;
+  --shadow-soft: 0 18px 48px rgba(34, 52, 60, 0.08);
+  --shadow-tight: 0 8px 22px rgba(34, 52, 60, 0.08);
+  --font-display: "Avenir Next Condensed", "DIN Condensed", "PingFang SC", sans-serif;
+  --font-body: "Avenir Next", "PingFang SC", "Hiragino Sans GB", sans-serif;
+  --font-mono: "SFMono-Regular", "Menlo", "Monaco", "Courier New", monospace;
+}
+
 :global(body) {
   margin: 0;
   min-width: 320px;
   background:
-    radial-gradient(circle at 10% 8%, rgba(255, 197, 176, 0.58), transparent 28rem),
-    radial-gradient(circle at 86% 14%, rgba(137, 186, 220, 0.36), transparent 24rem),
-    linear-gradient(135deg, #fff8ef 0%, #f5efe4 48%, #edf4f1 100%);
-  color: #1f2930;
-  font-family:
-    "Tsukimi Rounded",
-    "Yuanti SC",
-    "Hiragino Maru Gothic ProN",
-    "PingFang SC",
-    sans-serif;
+    linear-gradient(90deg, rgba(23, 37, 45, 0.055) 1px, transparent 1px),
+    linear-gradient(rgba(23, 37, 45, 0.045) 1px, transparent 1px),
+    linear-gradient(135deg, #f4efe4 0%, #eef3ef 56%, #f8f3ea 100%);
+  background-size: 28px 28px, 28px 28px, auto;
+  color: var(--ink);
+  font-family: var(--font-body);
   text-rendering: optimizeLegibility;
 }
 
@@ -208,83 +226,53 @@ onMounted(() => {
 .chat-page {
   position: relative;
   min-height: 100vh;
-  overflow: hidden;
-  padding: 28px 18px;
-}
-
-.chat-page::before {
-  position: fixed;
-  inset: 0;
-  pointer-events: none;
-  content: "";
-  opacity: 0.28;
-  background-image:
-    linear-gradient(rgba(35, 53, 62, 0.06) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(35, 53, 62, 0.05) 1px, transparent 1px);
-  background-size: 34px 34px;
-  mask-image: linear-gradient(to bottom, black 0%, transparent 80%);
-}
-
-.ambient {
-  position: fixed;
-  pointer-events: none;
-  border-radius: 999px;
-  filter: blur(2px);
-}
-
-.ambient-one {
-  width: 180px;
-  height: 180px;
-  right: -46px;
-  top: 100px;
-  border: 1px solid rgba(40, 93, 122, 0.18);
-  background: rgba(255, 255, 255, 0.24);
-}
-
-.ambient-two {
-  width: 140px;
-  height: 140px;
-  left: -42px;
-  bottom: 72px;
-  border: 1px dashed rgba(221, 120, 91, 0.28);
+  overflow-x: hidden;
+  padding: 16px;
 }
 
 .chat-shell {
   position: relative;
   z-index: 1;
-  width: min(1120px, 100%);
+  width: min(1440px, 100%);
   margin: 0 auto;
   display: flex;
   flex-direction: column;
-  gap: 20px;
-  animation: shell-in 560ms ease both;
+  gap: 12px;
+  animation: shell-in 360ms ease both;
 }
 
 .workspace {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(286px, 330px);
-  gap: 20px;
+  grid-template-columns: minmax(0, 1fr) minmax(320px, 360px);
+  gap: 12px;
   align-items: start;
 }
 
 .main-column {
   display: grid;
-  gap: 16px;
+  gap: 12px;
 }
 
 .quick-prompts {
   display: flex;
   flex-wrap: wrap;
-  gap: 10px;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--panel);
+  box-shadow: var(--shadow-tight);
 }
 
 .prompt-chip {
-  border: 1px solid rgba(43, 76, 88, 0.13);
+  min-height: 34px;
+  border: 1px solid var(--line);
   border-radius: 999px;
-  padding: 9px 13px;
-  color: #294654;
-  background: rgba(255, 253, 248, 0.72);
-  box-shadow: 0 10px 26px rgba(42, 61, 69, 0.06);
+  padding: 0 11px;
+  color: var(--ink-soft);
+  background: rgba(255, 252, 244, 0.72);
+  font-size: 0.84rem;
+  font-weight: 800;
   cursor: pointer;
   transition:
     transform 160ms ease,
@@ -293,9 +281,9 @@ onMounted(() => {
 }
 
 .prompt-chip:hover {
-  transform: translateY(-2px);
-  border-color: rgba(221, 120, 91, 0.42);
-  background: #fffdf8;
+  transform: translateY(-1px);
+  border-color: rgba(200, 95, 73, 0.42);
+  background: var(--panel-strong);
 }
 
 @media (max-width: 960px) {
@@ -306,7 +294,7 @@ onMounted(() => {
 
 @media (max-width: 720px) {
   .chat-page {
-    padding: 16px 12px;
+    padding: 10px;
   }
 
   .quick-prompts {

@@ -45,3 +45,48 @@ func TestSaveCandidatesDeduplicatesUserProfileNameVariants(t *testing.T) {
 		t.Fatalf("unexpected memory after dedupe: %#v", memories[0])
 	}
 }
+
+func TestUpdateMemoryStatusDisablesAndReenablesMemory(t *testing.T) {
+	store, err := NewMemoryStore(t.TempDir() + "/memory-store.json")
+	if err != nil {
+		t.Fatalf("create memory store: %v", err)
+	}
+
+	now := time.Date(2026, 6, 5, 15, 0, 0, 0, time.UTC)
+	written, err := store.SaveCandidates([]MemoryCandidate{
+		{
+			Type:       "project_fact",
+			Content:    "项目使用 Vue 3。",
+			Reason:     "用户明确说明技术栈",
+			Confidence: 0.9,
+		},
+	}, "trace-1", "message-1", now)
+	if err != nil {
+		t.Fatalf("save candidates: %v", err)
+	}
+
+	disabled, err := store.UpdateMemoryStatus(written[0].ID, disabledMemoryStatus, now.Add(time.Minute))
+	if err != nil {
+		t.Fatalf("disable memory: %v", err)
+	}
+	if disabled.Status != disabledMemoryStatus {
+		t.Fatalf("expected disabled status: %#v", disabled)
+	}
+	if len(store.ListMemories()) != 0 {
+		t.Fatalf("expected disabled memory to be excluded from active list")
+	}
+	if len(store.ListAllMemories()) != 1 {
+		t.Fatalf("expected disabled memory to remain visible in all list")
+	}
+
+	enabled, err := store.UpdateMemoryStatus(written[0].ID, activeMemoryStatus, now.Add(2*time.Minute))
+	if err != nil {
+		t.Fatalf("enable memory: %v", err)
+	}
+	if enabled.Status != activeMemoryStatus {
+		t.Fatalf("expected active status: %#v", enabled)
+	}
+	if len(store.ListMemories()) != 1 {
+		t.Fatalf("expected reenabled memory in active list")
+	}
+}

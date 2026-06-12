@@ -14,6 +14,7 @@ import (
 
 const (
 	activeMemoryStatus       = "active"
+	disabledMemoryStatus     = "disabled"
 	defaultMemoryType        = "project_fact"
 	memoryWriteMinConfidence = 0.75
 )
@@ -82,11 +83,45 @@ func (s *MemoryStore) ListMemories() []Memory {
 		}
 	}
 
-	sort.SliceStable(memories, func(i, j int) bool {
-		return memories[i].UpdatedAt.After(memories[j].UpdatedAt)
-	})
+	sortMemoriesByUpdatedAt(memories)
 
 	return memories
+}
+
+func (s *MemoryStore) ListAllMemories() []Memory {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	memories := make([]Memory, 0, len(s.state.Memories))
+	memories = append(memories, s.state.Memories...)
+	sortMemoriesByUpdatedAt(memories)
+	return memories
+}
+
+func (s *MemoryStore) UpdateMemoryStatus(id string, status string, now time.Time) (Memory, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	id = strings.TrimSpace(id)
+	status = strings.TrimSpace(status)
+	if id == "" || !isAllowedMemoryStatus(status) {
+		return Memory{}, ErrInvalidMemory
+	}
+
+	for index, memory := range s.state.Memories {
+		if memory.ID != id {
+			continue
+		}
+		memory.Status = status
+		memory.UpdatedAt = now
+		s.state.Memories[index] = memory
+		if err := s.persistLocked(); err != nil {
+			return Memory{}, err
+		}
+		return memory, nil
+	}
+
+	return Memory{}, ErrMemoryMissing
 }
 
 func (s *MemoryStore) FindRelevantMemories(query string, limit int) ([]Memory, error) {
@@ -293,6 +328,16 @@ func memoryTokens(text string) []string {
 	return strings.FieldsFunc(strings.ToLower(text), func(r rune) bool {
 		return unicode.IsSpace(r) || unicode.IsPunct(r) || unicode.IsSymbol(r)
 	})
+}
+
+func sortMemoriesByUpdatedAt(memories []Memory) {
+	sort.SliceStable(memories, func(i, j int) bool {
+		return memories[i].UpdatedAt.After(memories[j].UpdatedAt)
+	})
+}
+
+func isAllowedMemoryStatus(status string) bool {
+	return status == activeMemoryStatus || status == disabledMemoryStatus
 }
 
 func normalizeMemoryContent(content string) string {

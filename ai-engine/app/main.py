@@ -3,8 +3,9 @@ from fastapi import FastAPI, HTTPException
 
 from app.llm.client import current_provider, llm_enabled
 from app.orchestration.agent_plan import generate_agent_plan
+from app.orchestration.agent_step import generate_agent_step
 from app.orchestration.generate_reply import generate_reply
-from app.schemas import AgentPlanRequest, AgentPlanResponse, GenerateRequest, GenerateResponse
+from app.schemas import AgentPlanRequest, AgentPlanResponse, AgentStepRequest, AgentStepResponse, GenerateRequest, GenerateResponse
 
 
 load_dotenv()
@@ -38,3 +39,12 @@ def agent_plan(payload: AgentPlanRequest) -> AgentPlanResponse:
         raise HTTPException(status_code=400, detail="goal must not be empty")
 
     return generate_agent_plan(payload.model_copy(update={"goal": goal}))
+
+
+@app.post("/agent/step", response_model=AgentStepResponse)
+def agent_step(payload: AgentStepRequest) -> AgentStepResponse:
+    goal = payload.goal.strip()
+    if not goal:
+        raise HTTPException(status_code=400, detail="goal must not be empty")
+
+    return generate_agent_step(payload.model_copy(update={"goal": goal}))

@@ -1,4 +1,10 @@
-import type { AgentTaskResponse } from "../types/agent";
+import type {
+  AgentTask,
+  AgentTaskTrace,
+  AgentTaskTraceResponse,
+  AgentTaskResponse,
+  AgentTasksResponse,
+} from "../types/agent";
 
 type ErrorResponse = {
   error?: string;
@@ -41,6 +47,64 @@ export async function fetchAgentTask(taskId: string): Promise<AgentTaskResponse>
   return decodeAgentTaskResponse(response, "任务读取失败，请稍后重试。");
 }
 
+export async function fetchAgentTaskTrace(taskId: string): Promise<AgentTaskTraceResponse> {
+  let response: Response;
+
+  try {
+    response = await fetch(`/api/agent/tasks/${encodeURIComponent(taskId)}/trace`);
+  } catch {
+    throw new AgentApiError("请求没有发到后端。先检查 backend 是否已经启动。");
+  }
+
+  const payload = (await response.json()) as Partial<AgentTaskTraceResponse> & ErrorResponse;
+
+  if (!response.ok) {
+    throw new AgentApiError(payload.error || "任务 Trace 读取失败，请稍后重试。");
+  }
+
+  if (!isAgentTaskTrace(payload.trace)) {
+    throw new AgentApiError("任务 Trace 响应结构不完整，请检查接口返回。");
+  }
+
+  return payload as AgentTaskTraceResponse;
+}
+
+export async function fetchAgentTasks(limit = 20): Promise<AgentTasksResponse> {
+  let response: Response;
+
+  try {
+    response = await fetch(`/api/agent/tasks?limit=${encodeURIComponent(String(limit))}`);
+  } catch {
+    throw new AgentApiError("请求没有发到后端。先检查 backend 是否已经启动。");
+  }
+
+  const payload = (await response.json()) as Partial<AgentTasksResponse> & ErrorResponse;
+
+  if (!response.ok) {
+    throw new AgentApiError(payload.error || "任务列表读取失败，请稍后重试。");
+  }
+
+  if (!Array.isArray(payload.tasks) || payload.tasks.some((task) => !isAgentTask(task))) {
+    throw new AgentApiError("任务列表响应结构不完整，请检查接口返回。");
+  }
+
+  return payload as AgentTasksResponse;
+}
+
+export async function retryAgentTask(taskId: string): Promise<AgentTaskResponse> {
+  let response: Response;
+
+  try {
+    response = await fetch(`/api/agent/tasks/${encodeURIComponent(taskId)}/retry`, {
+      method: "POST",
+    });
+  } catch {
+    throw new AgentApiError("请求没有发到后端。先检查 backend 是否已经启动。");
+  }
+
+  return decodeAgentTaskResponse(response, "任务重试失败，请确认任务处于失败状态。");
+}
+
 async function decodeAgentTaskResponse(
   response: Response,
   fallbackMessage: string,
@@ -51,19 +115,56 @@ async function decodeAgentTaskResponse(
     throw new AgentApiError(payload.error || fallbackMessage);
   }
 
-  if (
-    !payload.task ||
-    !payload.task.id ||
-    !payload.task.goal ||
-    !payload.task.status ||
-    !Array.isArray(payload.task.plan) ||
-    !Array.isArray(payload.task.files_to_read) ||
-    !Array.isArray(payload.task.planner_context_used) ||
-    !Array.isArray(payload.task.logs) ||
-    !Array.isArray(payload.task.changed_files)
-  ) {
+  if (!isAgentTask(payload.task)) {
     throw new AgentApiError("任务响应结构不完整，请检查接口返回。");
   }
 
   return payload as AgentTaskResponse;
+}
+
+function isAgentTask(task: unknown): task is AgentTask {
+  if (!task || typeof task !== "object") {
+    return false;
+  }
+
+  const candidate = task as Partial<AgentTask>;
+  return Boolean(
+    candidate.id &&
+      candidate.goal &&
+      candidate.status &&
+      typeof candidate.retry_count === "number" &&
+      Array.isArray(candidate.plan) &&
+      Array.isArray(candidate.files_to_read) &&
+      Array.isArray(candidate.planner_context_used) &&
+      Array.isArray(candidate.steps) &&
+      Array.isArray(candidate.logs) &&
+      Array.isArray(candidate.changed_files),
+  );
+}
+
+function isAgentTaskTrace(trace: unknown): trace is AgentTaskTrace {
+  if (!trace || typeof trace !== "object") {
+    return false;
+  }
+
+  const candidate = trace as Partial<AgentTaskTrace>;
+  return Boolean(
+    candidate.task_id &&
+      candidate.goal &&
+      candidate.status &&
+      Array.isArray(candidate.planner_context_used) &&
+      Array.isArray(candidate.events) &&
+      Array.isArray(candidate.changed_files) &&
+      typeof candidate.duration_ms === "number" &&
+      candidate.events.every(
+        (event) =>
+          event &&
+          typeof event.index === "number" &&
+          typeof event.kind === "string" &&
+          typeof event.status === "string" &&
+          typeof event.title === "string" &&
+          Array.isArray(event.context_used) &&
+          typeof event.duration_ms === "number",
+      ),
+  );
 }

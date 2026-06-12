@@ -2,6 +2,7 @@ package app
 
 import (
 	"fmt"
+	"sort"
 	"sync"
 	"time"
 )
@@ -29,6 +30,7 @@ func (s *AgentTaskStore) Create(goal string, workspace *Workspace, now time.Time
 		Plan:               []string{},
 		FilesToRead:        []string{},
 		PlannerContextUsed: []string{},
+		Steps:              []AgentTaskStep{},
 		Logs:               []AgentTaskLog{},
 		ChangedFiles:       []string{},
 		CreatedAt:          now,
@@ -56,6 +58,31 @@ func (s *AgentTaskStore) Get(id string) (AgentTask, bool) {
 	return cloneAgentTask(task), true
 }
 
+func (s *AgentTaskStore) ListRecent(limit int) []AgentTask {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if limit <= 0 {
+		limit = 20
+	}
+	if limit > 100 {
+		limit = 100
+	}
+
+	tasks := make([]AgentTask, 0, len(s.tasks))
+	for _, task := range s.tasks {
+		tasks = append(tasks, cloneAgentTask(task))
+	}
+	sort.Slice(tasks, func(left int, right int) bool {
+		return tasks[left].UpdatedAt.After(tasks[right].UpdatedAt)
+	})
+	if len(tasks) > limit {
+		return tasks[:limit]
+	}
+
+	return tasks
+}
+
 func (s *AgentTaskStore) Update(id string, update func(*AgentTask)) (AgentTask, bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -71,10 +98,45 @@ func (s *AgentTaskStore) Update(id string, update func(*AgentTask)) (AgentTask, 
 	return cloneAgentTask(task), true
 }
 
+func (s *AgentTaskStore) Retry(id string, now time.Time) (AgentTask, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	task, ok := s.tasks[id]
+	if !ok {
+		return AgentTask{}, ErrAgentTaskMissing
+	}
+	if task.Status != AgentTaskFailed {
+		return AgentTask{}, ErrInvalidAgentTask
+	}
+
+	task.Status = AgentTaskQueued
+	task.RetryCount++
+	task.Plan = []string{}
+	task.FilesToRead = []string{}
+	task.InitialAction = nil
+	task.Planner = ""
+	task.PlannerContextUsed = []string{}
+	task.Verification = nil
+	task.Result = nil
+	task.Error = ""
+	task.CompletedAt = nil
+	task.UpdatedAt = now
+	task.Logs = append(task.Logs, AgentTaskLog{
+		At:      now,
+		Status:  AgentTaskQueued,
+		Message: fmt.Sprintf("Retry %d queued on existing branch.", task.RetryCount),
+	})
+
+	s.tasks[id] = task
+	return cloneAgentTask(task), nil
+}
+
 func cloneAgentTask(task AgentTask) AgentTask {
 	task.Plan = append([]string{}, task.Plan...)
 	task.FilesToRead = append([]string{}, task.FilesToRead...)
 	task.PlannerContextUsed = append([]string{}, task.PlannerContextUsed...)
+	task.Steps = cloneAgentTaskSteps(task.Steps)
 	task.Logs = append([]AgentTaskLog{}, task.Logs...)
 	task.ChangedFiles = append([]string{}, task.ChangedFiles...)
 	if task.Workspace != nil {
@@ -86,6 +148,11 @@ func cloneAgentTask(task AgentTask) AgentTask {
 		verification.Output = append([]string{}, task.Verification.Output...)
 		task.Verification = &verification
 	}
+	if task.Result != nil {
+		result := *task.Result
+		result.NextSuggestions = append([]string{}, task.Result.NextSuggestions...)
+		task.Result = &result
+	}
 	if task.InitialAction != nil {
 		initialAction := *task.InitialAction
 		task.InitialAction = &initialAction
@@ -96,4 +163,17 @@ func cloneAgentTask(task AgentTask) AgentTask {
 	}
 
 	return task
+}
+
+func cloneAgentTaskSteps(steps []AgentTaskStep) []AgentTaskStep {
+	cloned := make([]AgentTaskStep, len(steps))
+	for index, step := range steps {
+		cloned[index] = step
+		cloned[index].Observation.Items = append([]string{}, step.Observation.Items...)
+		cloned[index].Observation.Matches = append([]string{}, step.Observation.Matches...)
+		cloned[index].Observation.Output = append([]string{}, step.Observation.Output...)
+		cloned[index].ContextUsed = append([]string{}, step.ContextUsed...)
+	}
+
+	return cloned
 }

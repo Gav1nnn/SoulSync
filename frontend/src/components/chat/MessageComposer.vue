@@ -31,7 +31,6 @@ function handleKeydown(event: KeyboardEvent) {
   <form class="composer" @submit.prevent="emit('submit')">
     <div class="composer-head">
       <label class="label" for="message">给 Berry 的任务卡</label>
-      <span class="shortcut">Enter 发送 / Shift + Enter 换行</span>
     </div>
     <textarea
       id="message"
@@ -46,7 +45,7 @@ function handleKeydown(event: KeyboardEvent) {
     />
 
     <div class="actions">
-      <p class="hint">建议描述接口字段、页面目标或当前报错，Berry 会同步使用记忆和资料。</p>
+      <p class="hint">接口、字段、页面目标或报错都可以直接写在这里。</p>
       <button class="send" type="submit" :disabled="!canSend">
         <span>{{ isSending ? "联调中..." : "发送给 Berry" }}</span>
       </button>
@@ -57,15 +56,15 @@ function handleKeydown(event: KeyboardEvent) {
 <style scoped>
 .composer {
   position: sticky;
-  bottom: 16px;
+  bottom: 12px;
   display: grid;
   gap: 12px;
-  padding: 18px;
-  border: 1px solid rgba(43, 76, 88, 0.13);
-  border-radius: 28px;
-  background: rgba(255, 253, 248, 0.88);
-  box-shadow: 0 18px 50px rgba(43, 76, 88, 0.1);
-  backdrop-filter: blur(18px);
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--panel-strong);
+  box-shadow: var(--shadow-soft);
+  backdrop-filter: blur(12px);
 }
 
 .composer-head {
@@ -76,33 +75,27 @@ function handleKeydown(event: KeyboardEvent) {
 }
 
 .label,
-.hint,
-.shortcut {
+.hint {
   margin: 0;
 }
 
 .label {
-  color: #20333c;
+  color: var(--ink);
   font-size: 0.92rem;
   font-weight: 900;
 }
 
-.shortcut {
-  color: #7b8b92;
-  font-size: 0.78rem;
-}
-
 .input {
   width: 100%;
-  min-height: 120px;
-  padding: 15px 16px;
-  border: 1px solid rgba(43, 76, 88, 0.16);
-  border-radius: 20px;
+  min-height: 108px;
+  padding: 13px 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
   background:
     linear-gradient(rgba(255, 255, 255, 0.72), rgba(255, 255, 255, 0.72)),
-    repeating-linear-gradient(to bottom, transparent 0, transparent 31px, rgba(43, 76, 88, 0.06) 32px);
-  color: inherit;
-  line-height: 1.7;
+    repeating-linear-gradient(to bottom, transparent 0, transparent 31px, rgba(31, 55, 66, 0.05) 32px);
+  color: var(--ink);
+  line-height: 1.6;
   resize: vertical;
   transition:
     border-color 160ms ease,
@@ -112,9 +105,9 @@ function handleKeydown(event: KeyboardEvent) {
 
 .input:focus {
   outline: 0;
-  border-color: rgba(211, 111, 85, 0.72);
-  background: #fffefb;
-  box-shadow: 0 0 0 4px rgba(211, 111, 85, 0.12);
+  border-color: rgba(200, 95, 73, 0.62);
+  background: var(--panel-strong);
+  box-shadow: 0 0 0 3px rgba(200, 95, 73, 0.12);
 }
 
 .actions {
@@ -125,20 +118,20 @@ function handleKeydown(event: KeyboardEvent) {
 }
 
 .hint {
-  color: #61737b;
+  color: var(--muted);
   font-size: 0.88rem;
   line-height: 1.55;
 }
 
 .send {
   min-width: 120px;
-  padding: 13px 18px;
+  min-height: 40px;
+  padding: 0 16px;
   border: 0;
-  border-radius: 999px;
-  color: #fffdf8;
-  background:
-    linear-gradient(135deg, #20333c, #315f70 58%, #d36f55);
-  box-shadow: 0 12px 30px rgba(32, 51, 60, 0.18);
+  border-radius: var(--radius);
+  color: #fffaf1;
+  background: var(--ink);
+  box-shadow: var(--shadow-tight);
   font-weight: 900;
   cursor: pointer;
   transition:
@@ -148,8 +141,9 @@ function handleKeydown(event: KeyboardEvent) {
 }
 
 .send:hover:not(:disabled) {
-  transform: translateY(-2px);
-  box-shadow: 0 16px 34px rgba(32, 51, 60, 0.22);
+  transform: translateY(-1px);
+  background: var(--accent);
+  box-shadow: var(--shadow-soft);
 }
 
 .send:disabled {

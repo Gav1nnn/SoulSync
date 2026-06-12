@@ -108,6 +108,7 @@ def build_fallback_agent_plan(request: AgentPlanRequest) -> AgentPlanResponse:
             first_path(summary.api_client_candidates),
             first_path(summary.frontend_entry_candidates),
             first_path(summary.type_file_candidates),
+            first_path(summary.project_doc_candidates),
         ]
     )
     plan = [
@@ -120,6 +121,8 @@ def build_fallback_agent_plan(request: AgentPlanRequest) -> AgentPlanResponse:
         plan.append(f"检查 API client 约定：{first_path(summary.api_client_candidates)}")
     if first_path(summary.frontend_entry_candidates):
         plan.append(f"参考前端页面入口：{first_path(summary.frontend_entry_candidates)}")
+    if first_path(summary.project_doc_candidates):
+        plan.append(f"读取项目文档候选：{first_path(summary.project_doc_candidates)}")
     plan.append("给出第一轮只读动作，等待 Go 执行。")
 
     if files_to_read:
@@ -151,6 +154,9 @@ def build_workspace_context(request: AgentPlanRequest) -> str:
         f"Frontend frameworks: {', '.join(summary.frontend_frameworks) or 'none'}",
         f"Backend frameworks: {', '.join(summary.backend_frameworks) or 'none'}",
         "Backend route candidates:\n" + candidate_lines(summary.backend_route_candidates),
+        "API candidates:\n" + api_candidate_lines(summary.api_candidates),
+        "Project doc candidates:\n" + candidate_lines(summary.project_doc_candidates),
+        "Project doc snippets:\n" + project_doc_snippet_lines(summary.project_doc_snippets),
         "API client candidates:\n" + candidate_lines(summary.api_client_candidates),
         "Frontend entry candidates:\n" + candidate_lines(summary.frontend_entry_candidates),
         "Type file candidates:\n" + candidate_lines(summary.type_file_candidates),
@@ -165,6 +171,25 @@ def candidate_lines(candidates) -> str:
     if not candidates:
         return "- none"
     return "\n".join(f"- {candidate.path} ({candidate.kind}): {candidate.reason}" for candidate in candidates[:8])
+
+
+def api_candidate_lines(candidates) -> str:
+    if not candidates:
+        return "- none"
+    lines = []
+    for candidate in candidates[:8]:
+        type_paths = ", ".join(item.path for item in candidate.type_definitions[:4]) or "none"
+        lines.append(
+            f"- {candidate.method} {candidate.path} handler={candidate.handler} "
+            f"file={candidate.handler_file} types={type_paths}"
+        )
+    return "\n".join(lines)
+
+
+def project_doc_snippet_lines(snippets) -> str:
+    if not snippets:
+        return "- none"
+    return "\n".join(f"- {snippet.path} ({snippet.kind}): {snippet.content}" for snippet in snippets[:4])
 
 
 def parse_json_object(content: str) -> dict:

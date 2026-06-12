@@ -25,10 +25,14 @@ func (s *HTTPServer) Router() *gin.Engine {
 	router.GET("/api/traces/:trace_id", s.trace)
 	router.GET("/api/workspaces/current", s.currentWorkspace)
 	router.GET("/api/workspaces/current/summary", s.currentWorkspaceSummary)
+	router.GET("/api/agent/tasks", s.agentTasks)
+	router.GET("/api/agent/tasks/:id/trace", s.agentTaskTrace)
 	router.GET("/api/agent/tasks/:id", s.agentTask)
 	router.POST("/api/agent/tasks", s.createAgentTask)
+	router.POST("/api/agent/tasks/:id/retry", s.retryAgentTask)
 	router.POST("/api/workspaces", s.connectWorkspace)
 	router.POST("/api/chat", s.chat)
+	router.PATCH("/api/memories/:id", s.updateMemory)
 	return router
 }
 
@@ -73,6 +77,39 @@ func (s *HTTPServer) chat(c *gin.Context) {
 func (s *HTTPServer) memories(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"memories": s.service.Memories(),
+	})
+}
+
+func (s *HTTPServer) updateMemory(c *gin.Context) {
+	var request MemoryUpdateRequest
+	if err := c.ShouldBindJSON(&request); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "invalid request body",
+		})
+		return
+	}
+
+	memory, err := s.service.UpdateMemoryStatus(c.Param("id"), request.Status)
+	if err != nil {
+		switch {
+		case errors.Is(err, ErrInvalidMemory):
+			c.JSON(http.StatusBadRequest, gin.H{
+				"error": err.Error(),
+			})
+		case errors.Is(err, ErrMemoryMissing):
+			c.JSON(http.StatusNotFound, gin.H{
+				"error": err.Error(),
+			})
+		default:
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"error": "internal server error",
+			})
+		}
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"memory": memory,
 	})
 }
 
@@ -221,6 +258,24 @@ func (s *HTTPServer) createAgentTask(c *gin.Context) {
 	})
 }
 
+func (s *HTTPServer) agentTasks(c *gin.Context) {
+	limit := 20
+	if rawLimit := c.Query("limit"); rawLimit != "" {
+		parsedLimit, err := strconv.Atoi(rawLimit)
+		if err != nil || parsedLimit <= 0 {
+			c.JSON(http.StatusBadRequest, gin.H{
+				"error": "limit must be a positive integer",
+			})
+			return
+		}
+		limit = parsedLimit
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"tasks": s.service.RecentAgentTasks(limit),
+	})
+}
+
 func (s *HTTPServer) agentTask(c *gin.Context) {
 	task, err := s.service.AgentTask(c.Param("id"))
 	if err != nil {
@@ -238,6 +293,52 @@ func (s *HTTPServer) agentTask(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{
+		"task": task,
+	})
+}
+
+func (s *HTTPServer) agentTaskTrace(c *gin.Context) {
+	trace, err := s.service.AgentTaskTrace(c.Param("id"))
+	if err != nil {
+		if errors.Is(err, ErrAgentTaskMissing) {
+			c.JSON(http.StatusNotFound, gin.H{
+				"error": err.Error(),
+			})
+			return
+		}
+
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": "internal server error",
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"trace": trace,
+	})
+}
+
+func (s *HTTPServer) retryAgentTask(c *gin.Context) {
+	task, err := s.service.RetryAgentTask(c.Param("id"))
+	if err != nil {
+		switch {
+		case errors.Is(err, ErrAgentTaskMissing):
+			c.JSON(http.StatusNotFound, gin.H{
+				"error": err.Error(),
+			})
+		case errors.Is(err, ErrInvalidAgentTask):
+			c.JSON(http.StatusBadRequest, gin.H{
+				"error": err.Error(),
+			})
+		default:
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"error": "internal server error",
+			})
+		}
+		return
+	}
+
+	c.JSON(http.StatusAccepted, gin.H{
 		"task": task,
 	})
 }
